@@ -1,0 +1,49 @@
+# Scenario D, contrib arm 1: filter can only cap a service by deleting it.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:34317
+        max_recv_msg_size_mib: 32
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+  filter/legacy:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] == "legacy-svc"'
+  batch:
+    timeout: 1s
+    send_batch_size: 2048
+
+exporters:
+  otlp:
+    endpoint: 127.0.0.1:34417
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 8
+      queue_size: 20000
+
+service:
+  telemetry:
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 38888
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/legacy, batch]
+      exporters: [otlp]

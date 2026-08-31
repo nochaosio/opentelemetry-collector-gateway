@@ -1,0 +1,28 @@
+# Same pipeline as config-baseline.yaml but on port 17317 so it can run
+# alongside the upstream-core benchmark without clashing.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:17317
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 2048
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    metrics:
+      level: none
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

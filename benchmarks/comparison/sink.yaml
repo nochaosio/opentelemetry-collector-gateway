@@ -1,0 +1,50 @@
+# Backend sink, shared by every arm. Always contrib, never the system under
+# test: OUT has to be counted by something neither side controls.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:34417
+        max_recv_msg_size_mib: 32
+
+connectors:
+  count:
+    spans:
+      sink_spans:
+        description: spans that actually reached the backend
+        attributes:
+          - key: svc
+            default_value: unknown
+
+processors:
+  # count emits one delta sum per batch and the Prometheus exporter overwrites
+  # rather than accumulates. Without this the counter reports the last batch.
+  deltatocumulative: {}
+
+exporters:
+  nop: {}
+  prometheus:
+    endpoint: 127.0.0.1:39090
+    namespace: bench
+    metric_expiration: 30m
+
+service:
+  telemetry:
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 38889
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [count, nop]
+    metrics:
+      receivers: [count]
+      processors: [deltatocumulative]
+      exporters: [prometheus]

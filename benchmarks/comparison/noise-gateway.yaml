@@ -1,0 +1,51 @@
+# Scenario B, gateway arm: same drop, rule in Redis instead of in this file.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:34317
+        max_recv_msg_size_mib: 32
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+  statefulfilter:
+    redis:
+      addr: 127.0.0.1:6399
+      key_prefix: otelcol:filter
+    refresh_interval: 5s
+    wait_for_initial_load: true
+    initial_load_timeout: 5s
+  batch:
+    timeout: 1s
+    send_batch_size: 2048
+
+exporters:
+  otlp:
+    endpoint: 127.0.0.1:34417
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 8
+      queue_size: 20000
+
+service:
+  telemetry:
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 38888
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, statefulfilter, batch]
+      exporters: [otlp]

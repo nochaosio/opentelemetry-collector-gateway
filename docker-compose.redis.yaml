@@ -1,0 +1,43 @@
+# 2 gateway replicas + a shared Redis: the rate limit becomes fleet-wide.
+# Walkthrough with metrics and bucket inspection:
+# playground/ratelimitprocessor/README.md (scenario 6).
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: otelcol-redis
+    ports:
+      - "6379:6379"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    container_name: otelcol-redis-exporter
+    command: ["--redis.addr", "redis://redis:6379"]
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+
+  gateway-a:
+    build:
+      context: .
+    image: otelcol-gateway:dev
+    container_name: otelcol-gateway-a
+    ports:
+      - "4319:4317"  # OTLP gRPC
+      - "8889:8888"  # self-telemetry
+    volumes:
+      - ./config/otelcol-gateway-redis.yaml:/etc/otelcol-gateway/config.yaml:ro
+    depends_on:
+      - redis
+
+  gateway-b:
+    image: otelcol-gateway:dev
+    container_name: otelcol-gateway-b
+    ports:
+      - "4320:4317"
+      - "8890:8888"
+    volumes:
+      - ./config/otelcol-gateway-redis.yaml:/etc/otelcol-gateway/config.yaml:ro
+    depends_on:
+      - redis
+      - gateway-a

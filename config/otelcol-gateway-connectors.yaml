@@ -1,0 +1,132 @@
+# Connector toolbox: signal-to-signal wiring, all four connectors in one
+# runnable config.
+#
+#   otlp -> traces --+-> spanmetrics -+-> metrics/derived -> round_robin -+-> metrics/backend-a
+#                    +-> count -------+                                   +-> metrics/backend-b
+#                    |
+#                    +-> failover --+-> traces/primary   (unreachable here on purpose)
+#                                   +-> traces/secondary (takes over)
+#
+# Run it as-is to watch the behaviour locally:
+#   otelcol-gateway --config config/otelcol-gateway-connectors.yaml
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+connectors:
+  # traces -> metrics: RED metrics (calls, duration) derived from the spans
+  # flowing through the gateway, so producers don't need to emit them.
+  span_metrics:
+    namespace: gateway
+    histogram:
+      explicit:
+        buckets: [10ms, 50ms, 100ms, 500ms, 1s, 5s]
+    dimensions:
+      - name: http.route
+      - name: http.response.status_code
+        default: "0"
+    metrics_flush_interval: 5s
+    # Bounds the series count when a producer sprays unique dimension values.
+    aggregation_cardinality_limit: 10000
+
+  # traces -> metrics: cheap volume/error counters. Keeps a per-service view of
+  # ingestion even when the trace payloads themselves are sampled away.
+  count:
+    spans:
+      gateway.span.count:
+        description: Spans observed by the gateway.
+      gateway.error.span.count:
+        description: Spans that ended in error.
+        conditions:
+          - span.status.code == STATUS_CODE_ERROR
+
+  # Health-based failover between backends: level 1 is used while it accepts
+  # data; on failure the whole level is marked unhealthy and level 2 takes over,
+  # with a retry of the higher level every retry_interval.
+  failover:
+    priority_levels:
+      - [traces/primary]
+      - [traces/secondary]
+    retry_interval: 1m
+
+  # Alternates batches between the downstream pipelines. Useful to spread load
+  # over equivalent backends without an external load balancer.
+  round_robin: {}
+
+exporters:
+  # Stand-in for the real backend: the host does not resolve, which is what
+  # makes the failover to the secondary level visible in a local run — point it
+  # at your backend and level 1 becomes the one doing the work.
+  otlp/primary:
+    endpoint: backend-primary:4317
+    tls:
+      insecure: true
+    timeout: 2s
+    retry_on_failure:
+      enabled: false
+    sending_queue:
+      enabled: false
+
+  debug/secondary:
+    verbosity: basic
+  debug/backend-a:
+    verbosity: basic
+  debug/backend-b:
+    verbosity: basic
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    # Ingest once, fan the spans out to the two derivers and to the exporting
+    # branch. spanmetrics/count only read the traces; failover exports them.
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [span_metrics, count, failover]
+
+    traces/primary:
+      receivers: [failover]
+      exporters: [otlp/primary]
+    traces/secondary:
+      receivers: [failover]
+      exporters: [debug/secondary]
+
+    # Both connectors emit metrics into the same branch.
+    metrics/derived:
+      receivers: [span_metrics, count]
+      processors: [batch]
+      exporters: [round_robin]
+
+    metrics/backend-a:
+      receivers: [round_robin]
+      exporters: [debug/backend-a]
+    metrics/backend-b:
+      receivers: [round_robin]
+      exporters: [debug/backend-b]

@@ -1,0 +1,140 @@
+# ratelimit processor playground.
+#
+# One receiver + one processor + one pipeline per scenario, so a scenario never
+# consumes another scenario's token bucket. Ports map 1:1 to the scenarios in
+# README.md.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  # Scenario 1 + 2: limit per service.name, with a per-service override.
+  otlp/by-service:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Scenario 3: monitor mode (count, never drop).
+  otlp/monitor:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4319
+
+  # Scenario 4: limit per custom resource attribute.
+  otlp/by-tenant:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4320
+
+  # Scenario 5: error spans bypass the limit.
+  otlp/priority:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4321
+
+  # Scenario 6: one bucket shared by every replica, kept in Redis.
+  otlp/shared:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4322
+
+processors:
+  # 5 spans/s for everyone, 2 spans/s for payment-service.
+  ratelimit/by-service:
+    limit_type: service_name
+    requests_per_second: 5
+    drop_on_limit: true
+    preserve_errors: false
+    specific_limits:
+      payment-service:
+        requests_per_second: 2
+    # Keep the real key on every counter so the metrics show who was throttled.
+    # Safe because the allowlist bounds the label values.
+    key_labels_on: [received, allowed, denied, preserved]
+    metrics_key_allowlist: [checkout, payment-service]
+
+  # Same idea, but nothing is dropped: only the metrics record the excess.
+  ratelimit/monitor:
+    limit_type: service_name
+    requests_per_second: 3
+    drop_on_limit: false
+    preserve_errors: false
+    key_labels_on: [received, allowed, denied, preserved]
+    metrics_key_allowlist: [noisy-service]
+
+  # The key is any resource attribute, not just service.name.
+  ratelimit/by-tenant:
+    limit_type: attribute
+    attribute_key: tenant.id
+    requests_per_second: 5
+    drop_on_limit: true
+    preserve_errors: false
+    specific_limits:
+      tenant-free:
+        requests_per_second: 2
+    key_labels_on: [received, allowed, denied, preserved]
+    metrics_key_allowlist: [tenant-free, tenant-gold]
+
+  # preserve_errors: error spans are forwarded even with an empty bucket.
+  ratelimit/priority:
+    limit_type: service_name
+    requests_per_second: 2
+    drop_on_limit: true
+    preserve_errors: true
+    key_labels_on: [received, allowed, denied, preserved]
+    metrics_key_allowlist: [checkout]
+
+  # Bucket state lives in Redis, so the limit is fleet-wide instead of
+  # per-replica. Both gateways in docker-compose.yaml use this pipeline.
+  ratelimit/shared:
+    limit_type: service_name
+    requests_per_second: 5
+    drop_on_limit: true
+    preserve_errors: false
+    key_labels_on: [received, allowed, denied, preserved]
+    metrics_key_allowlist: [checkout]
+    storage:
+      backend: redis
+      redis:
+        addr: redis:6379
+        key_prefix: otelcol:ratelimit
+        timeout: 100ms
+        on_error: open
+
+exporters:
+  # Prints one line per exported batch with the item counts that survived.
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces/by-service:
+      receivers: [otlp/by-service]
+      processors: [ratelimit/by-service]
+      exporters: [debug]
+    logs/monitor:
+      receivers: [otlp/monitor]
+      processors: [ratelimit/monitor]
+      exporters: [debug]
+    traces/by-tenant:
+      receivers: [otlp/by-tenant]
+      processors: [ratelimit/by-tenant]
+      exporters: [debug]
+    traces/priority:
+      receivers: [otlp/priority]
+      processors: [ratelimit/priority]
+      exporters: [debug]
+    traces/shared:
+      receivers: [otlp/shared]
+      processors: [ratelimit/shared]
+      exporters: [debug]
