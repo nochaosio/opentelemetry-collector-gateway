@@ -1,0 +1,14 @@
+# Every PR needs a review from the listed owners. Paths are matched in order,
+# so the most specific rule for a file wins.
+
+*                                       @apolzek
+
+/processor/ratelimitprocessor/          @apolzek
+/processor/statefulfilterprocessor/     @apolzek
+
+# Build manifest and generated distribution: changing these rebuilds the
+# collector binary, so they get the same scrutiny as component code.
+/builder-config.yaml                    @apolzek
+/cmd/                                   @apolzek
+
+/.github/                               @apolzek
