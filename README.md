@@ -4,17 +4,8 @@ A contrib-based OpenTelemetry Collector distribution standing at the front door 
 
 ## Built on
 
-This distribution is assembled with the [OpenTelemetry Collector Builder][ocb]
-from two upstream projects, consumed as Go module dependencies:
-
-- [open-telemetry/opentelemetry-collector][core], the collector core: the
-  service, pipeline plumbing, OTLP receiver and exporters, and the `batch` and
-  `memory_limiter` processors.
-- [open-telemetry/opentelemetry-collector-contrib][contrib], the community
-  components: Kafka, load balancing, Prometheus remote write, tail sampling,
-  the routing and span metrics connectors, and the auth extensions.
-
-Both are Apache-2.0. Their source is not vendored here; see [NOTICE](NOTICE).
+Assembled with the [OpenTelemetry Collector Builder][ocb], from
+[opentelemetry-collector][core] and [opentelemetry-collector-contrib][contrib].
 
 ## Components
 
