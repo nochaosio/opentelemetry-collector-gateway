@@ -1,11 +1,21 @@
 OCB_VERSION := v0.159.0
+MDATAGEN_VERSION := v0.159.0
 BINARY := cmd/otelcol-gateway/otelcol-gateway
 CONFIG := config/otelcol-gateway.yaml
 
-.PHONY: install-builder build run clean test test-unit validate docker-build
+.PHONY: install-builder install-mdatagen generate build run clean test test-unit validate docker-build
 
 install-builder:
 	go install go.opentelemetry.io/collector/cmd/builder@$(OCB_VERSION)
+
+install-mdatagen:
+	go install go.opentelemetry.io/collector/cmd/mdatagen@$(MDATAGEN_VERSION)
+
+# Regenerates internal/metadata, documentation.md and the generated component
+# tests from each processor's metadata.yaml. Run after editing metadata.yaml.
+generate:
+	cd processor/ratelimitprocessor && mdatagen metadata.yaml
+	cd processor/statefulfilterprocessor && mdatagen metadata.yaml
 
 build:
 	builder --config builder-config.yaml

@@ -1,11 +1,22 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package statefulfilterprocessor
 
 import (
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/nochaosio/opentelemetry-collector-gateway/processor/statefulfilterprocessor/internal/metadata"
 )
 
-const meterName = "github.com/nochaosio/opentelemetry-collector-gateway/processor/statefulfilterprocessor"
-
+// processorTelemetry adapts the mdatagen-generated TelemetryBuilder to the
+// field names the processor uses. Instrument names, units and descriptions
+// live in metadata.yaml; run `make generate` after changing them.
+//
+// rulesVersion is the fleet-convergence signal: alert on
+// max(version) != min(version) across replicas and you catch a collector that
+// stopped seeing rule updates.
 type processorTelemetry struct {
 	meter metric.Meter
 
@@ -20,95 +31,24 @@ type processorTelemetry struct {
 	rulesAge     metric.Float64ObservableGauge
 }
 
+// newProcessorTelemetry takes a MeterProvider rather than the full
+// component.TelemetrySettings because the generated builder only reads the
+// meter from it, and every call site already has the provider in hand.
 func newProcessorTelemetry(mp metric.MeterProvider) (*processorTelemetry, error) {
-	meter := mp.Meter(meterName)
-
-	evaluatedItems, err := meter.Int64Counter(
-		"otelcol_processor_statefulfilter_evaluated_items",
-		metric.WithDescription("Items (spans, log records, metric data points) evaluated against the Redis rule set"),
-		metric.WithUnit("{item}"),
-	)
+	ts := component.TelemetrySettings{MeterProvider: mp}
+	tb, err := metadata.NewTelemetryBuilder(ts)
 	if err != nil {
 		return nil, err
 	}
-
-	droppedItems, err := meter.Int64Counter(
-		"otelcol_processor_statefulfilter_dropped_items",
-		metric.WithDescription("Items dropped by a shared filter rule, labelled by the rule that matched"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	keptItems, err := meter.Int64Counter(
-		"otelcol_processor_statefulfilter_kept_items",
-		metric.WithDescription("Items explicitly rescued by a keep rule that would otherwise have matched a drop rule"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// The refresh-error total is exported as a gauge rather than a counter
-	// because the store owns the running value; the callback just reads it.
-	refreshErrors, err := meter.Int64ObservableGauge(
-		"otelcol_processor_statefulfilter_refresh_errors",
-		metric.WithDescription("Total failed rule refreshes since start (Redis unreachable, timeout); rules go stale, not empty"),
-		metric.WithUnit("{error}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	rulesLoaded, err := meter.Int64ObservableGauge(
-		"otelcol_processor_statefulfilter_rules_loaded",
-		metric.WithDescription("Filter rules currently active on this replica"),
-		metric.WithUnit("{rule}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	rulesInvalid, err := meter.Int64ObservableGauge(
-		"otelcol_processor_statefulfilter_rules_invalid",
-		metric.WithDescription("Rule documents rejected at the last refresh (bad JSON, unknown operator, bad regex)"),
-		metric.WithUnit("{rule}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Version is the fleet-convergence signal: alert on
-	// max(version) != min(version) across replicas and you catch a collector
-	// that stopped seeing rule updates.
-	rulesVersion, err := meter.Int64ObservableGauge(
-		"otelcol_processor_statefulfilter_rules_version",
-		metric.WithDescription("Rule-set version this replica has applied; diverging values across replicas mean the fleet is out of sync"),
-		metric.WithUnit("{version}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	rulesAge, err := meter.Float64ObservableGauge(
-		"otelcol_processor_statefulfilter_rules_age_seconds",
-		metric.WithDescription("Seconds since the last successful rule refresh; climbing means this replica is enforcing stale rules"),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	return &processorTelemetry{
-		meter:          meter,
-		evaluatedItems: evaluatedItems,
-		droppedItems:   droppedItems,
-		keptItems:      keptItems,
-		refreshErrors:  refreshErrors,
-		rulesLoaded:    rulesLoaded,
-		rulesInvalid:   rulesInvalid,
-		rulesVersion:   rulesVersion,
-		rulesAge:       rulesAge,
+		meter:          metadata.Meter(ts),
+		evaluatedItems: tb.ProcessorStatefulfilterEvaluatedItems,
+		droppedItems:   tb.ProcessorStatefulfilterDroppedItems,
+		keptItems:      tb.ProcessorStatefulfilterKeptItems,
+		refreshErrors:  tb.ProcessorStatefulfilterRefreshErrors,
+		rulesLoaded:    tb.ProcessorStatefulfilterRulesLoaded,
+		rulesInvalid:   tb.ProcessorStatefulfilterRulesInvalid,
+		rulesVersion:   tb.ProcessorStatefulfilterRulesVersion,
+		rulesAge:       tb.ProcessorStatefulfilterRulesAgeSeconds,
 	}, nil
 }
