@@ -1,0 +1,36 @@
+# Exercised by TestLoadConfig. Every field here must round-trip through
+# confmap, so a broken mapstructure tag fails the build rather than silently
+# ignoring an operator's setting.
+ratelimit:
+  limit_type: attribute
+  attribute_key: tenant.id
+  requests_per_second: 500
+  requests_per_minute: 0
+  default_limit: 250
+  default_limit_period: second
+  drop_on_limit: true
+  preserve_errors: true
+  trace_id_aware: true
+  global_requests_per_second: 10000
+  global_requests_per_minute: 0
+  max_share_ratio: 0.2
+  rejection_mode: permanent
+  metrics_verbosity: basic
+  max_metric_keys: 50
+  metrics_key_allowlist: [checkout, payments]
+  key_labels_on: [denied, preserved]
+  specific_limits:
+    checkout:
+      requests_per_second: 10
+    reporting:
+      requests_per_minute: 600
+  storage:
+    backend: redis
+    max_buckets: 1000
+    redis:
+      addr: "127.0.0.1:6379"
+      db: 3
+      key_prefix: "otelcol:ratelimit:test"
+      timeout: 250ms
+      on_error: closed
+      negative_cache_ttl: 50ms

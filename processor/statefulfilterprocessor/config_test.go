@@ -1,8 +1,16 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package statefulfilterprocessor
 
 import (
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/collector/confmap"
+	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
 func TestValidate(t *testing.T) {
@@ -116,5 +124,45 @@ func TestCreateDefaultConfig(t *testing.T) {
 	}
 	if cfg.FailClosedOnEmpty {
 		t.Fatal("fail_closed_on_empty should default to false (fail-open)")
+	}
+}
+
+// TestLoadConfig round-trips testdata/config.yaml through confmap. Struct
+// literals in the other tests never exercise the mapstructure tags, so this is
+// the only place a renamed or missing tag shows up.
+func TestLoadConfig(t *testing.T) {
+	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
+	if err != nil {
+		t.Fatalf("LoadConf: %v", err)
+	}
+	sub, err := cm.Sub("statefulfilter")
+	if err != nil {
+		t.Fatalf("Sub: %v", err)
+	}
+
+	cfg := createDefaultConfig()
+	if err := sub.Unmarshal(cfg); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if err := confmap.Validate(cfg); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	want := &Config{
+		RefreshInterval:    15 * time.Second,
+		FullResyncEvery:    40,
+		WaitForInitialLoad: true,
+		InitialLoadTimeout: 7 * time.Second,
+		MaxRules:           2000,
+		FailClosedOnEmpty:  true,
+		Redis: &RedisConfig{
+			Addr:      "127.0.0.1:6379",
+			DB:        2,
+			KeyPrefix: "otelcol:filter:test",
+			Timeout:   300 * time.Millisecond,
+		},
+	}
+	if !reflect.DeepEqual(cfg, want) {
+		t.Errorf("config mismatch:\n got: %+v\nwant: %+v", cfg, want)
 	}
 }
