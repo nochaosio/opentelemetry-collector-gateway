@@ -1,7 +1,22 @@
 # AGENTS.md
 
-Instructions for AI agents working in this repository. Everything here, code,
-comments, docs and commit messages, is written in **English**.
+Instructions for AI agents working in this repository.
+
+## Language
+
+**Everything in this repository and around it is written in English.** No
+exceptions, regardless of the language the request was made in. That covers:
+
+- Source code: identifiers, comments, log and error messages, test names.
+- Documentation: every `.md` file, YAML comments, config samples.
+- Commit messages: subject and body.
+- Pull requests: title, description, review comments.
+- Issues: title, body, labels, and replies.
+- Release notes and changelog entries.
+
+A request written in another language does not change the output language.
+Answer the person in whichever language they used if you like, but anything
+that lands in the repository or on GitHub is English.
 
 ## What this repo is
 
