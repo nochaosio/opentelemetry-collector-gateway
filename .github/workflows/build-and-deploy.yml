@@ -3,6 +3,7 @@ name: build-and-deploy
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -15,11 +16,23 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       registry: ${{ steps.v.outputs.registry }}
     steps:
+      - uses: actions/checkout@v7
+      # Image tags are immutable once published, so they must never be reused.
+      # github.run_number cannot carry that guarantee: it restarts at 1 whenever
+      # the repository is recreated, which would make a new :2 overwrite an old
+      # :2 pointing at a different binary. Date plus commit SHA is unique for
+      # every build and sorts chronologically; a v* tag publishes under its own
+      # name instead.
       - id: v
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
-          echo "version=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(date -u +%Y.%m.%d)-$(git rev-parse --short=7 HEAD)"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "registry=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
   build:
@@ -36,10 +49,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      # - uses: docker/login-action@v4
-      #   with:
-      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -48,66 +57,40 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
-          push: ${{ github.ref == 'refs/heads/main' }}
+          push: ${{ github.ref == 'refs/heads/main' || github.ref_type == 'tag' }}
           tags: |
             ${{ needs.version.outputs.registry }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
             ${{ needs.version.outputs.registry }}/${{ matrix.image }}:latest
-          # tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  update-manifests:
+  # Deployment lives in the private environment repository, not here. This job
+  # only announces that a new image exists; whoever consumes the event decides
+  # what to roll out. Keeping the rollout steps in a public repo would publish
+  # the layout of that infrastructure for no benefit.
+  notify:
     needs: [version, build]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    env:
+      # The downstream repository name is configuration, not source, so it does
+      # not appear in a public workflow file.
+      DISPATCH_REPO: ${{ vars.DISPATCH_REPO }}
     steps:
-      - name: Check environment repo credential
-        id: gate
+      - name: Dispatch image-published event
         env:
-          ENVIRONMENT_PAT: ${{ secrets.ENVIRONMENT_PAT }}
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REGISTRY: ${{ needs.version.outputs.registry }}
         run: |
-          if [ -z "$ENVIRONMENT_PAT" ]; then
-            echo "::warning::ENVIRONMENT_PAT is not set; skipping the manifest bump"
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          if [ -z "$DISPATCH_TOKEN" ] || [ -z "$DISPATCH_REPO" ]; then
+            echo "::notice::DISPATCH_TOKEN or DISPATCH_REPO is not set; skipping the downstream dispatch"
+            exit 0
           fi
-      - name: Notify Discord (bump started)
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          VERSION: ${{ needs.version.outputs.version }}
-          REGISTRY: ${{ needs.version.outputs.registry }}
-        run: |
-          if [ -z "$DISCORD_WEBHOOK_URL" ]; then echo "DISCORD_WEBHOOK_URL is not set; skipping notification"; exit 0; fi
-          MSG="🦆 CI **opentelemetry-collector-gateway** applying image(s) \`${REGISTRY}/otelcol-gateway\` at tag \`${VERSION}\` under \`DEPLOYMENT_PATH\` in the environment repo"
-          payload=$(jq -n --arg c "$MSG" '{content: $c}')
-          curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
-      - name: Checkout environment repo
-        if: steps.gate.outputs.enabled == 'true'
-        uses: actions/checkout@v7
-        with:
-          repository: ORG/DEPLOYMENT_REPO
-          token: ${{ secrets.ENVIRONMENT_PAT }}
-          path: environment
-      - name: Bump image tags
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-          REGISTRY: ${{ needs.version.outputs.registry }}
-        run: |
-          cd DEPLOYMENT_PATH
-          for img in otelcol-gateway; do
-            sed -i -E "s#([[:space:]]image:[[:space:]]*)[^[:space:]]*${img}:[A-Za-z0-9._-]+#\1${REGISTRY}/${img}:${VERSION}#g" *.yaml
-          done
-          echo "---- diff ----"; git -C "$GITHUB_WORKSPACE/environment" --no-pager diff || true
-      - name: Commit and push
-        if: steps.gate.outputs.enabled == 'true'
-        run: |
-          cd environment
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add DEPLOYMENT_PATH
-          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
-          git commit -m "ci(opentelemetry-collector-gateway): bump images to ${VERSION}"
-          git push
+          curl -sS --fail-with-body -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${DISPATCH_REPO}/dispatches" \
+            -d "$(jq -n --arg v "$VERSION" --arg r "$REGISTRY" \
+                  '{event_type:"otelcol-gateway-image-published", client_payload:{version:$v, registry:$r}}')"
