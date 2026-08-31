@@ -1,0 +1,97 @@
+type: ratelimit
+github_project: nochaosio/opentelemetry-collector-gateway
+
+status:
+  class: processor
+  stability:
+    beta: [traces, metrics, logs]
+  distributions: [nochaos-gateway]
+  codeowners:
+    active: [apolzek]
+
+telemetry:
+  metrics:
+    processor_ratelimit_allowed_items:
+      enabled: true
+      stability: alpha
+      description: Number of items allowed through by the rate limit processor
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_backend_errors:
+      enabled: true
+      stability: alpha
+      description: Transient errors from the rate-limit storage backend (e.g. Redis unreachable while fail-open)
+      unit: "{error}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_bucket_available_tokens:
+      enabled: true
+      stability: alpha
+      description: Token-bucket tokens currently available (free) for watched keys; occupied = capacity - available
+      unit: "{token}"
+      gauge:
+        async: true
+        value_type: double
+
+    processor_ratelimit_bucket_capacity_tokens:
+      enabled: true
+      stability: alpha
+      description: Token-bucket capacity (max tokens == configured limit) for watched keys
+      unit: "{token}"
+      gauge:
+        async: true
+        value_type: double
+
+    processor_ratelimit_bucket_evictions:
+      enabled: true
+      stability: alpha
+      description: Buckets evicted because the memory backend hit its max_buckets cap
+      unit: "{bucket}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_denied_items:
+      enabled: true
+      stability: alpha
+      description: Number of items denied by the rate limit processor
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_fail_open_items:
+      enabled: true
+      stability: alpha
+      description: Items allowed through because the storage backend was unreachable (fail-open) and thus NOT rate-limited
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_preserved_items:
+      enabled: true
+      stability: alpha
+      description: Number of critical items preserved via priority bypass (error spans, error+ logs)
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_ratelimit_received_items:
+      enabled: true
+      stability: alpha
+      description: Number of items received by the rate limit processor
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+tests:
+  skip_lifecycle: true
+  skip_shutdown: true

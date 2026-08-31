@@ -1,11 +1,18 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/nochaosio/opentelemetry-collector-gateway/processor/ratelimitprocessor/internal/metadata"
 )
 
-const meterName = "github.com/nochaosio/opentelemetry-collector-gateway/processor/ratelimitprocessor"
-
+// processorTelemetry adapts the mdatagen-generated TelemetryBuilder to the
+// field names the processor uses. Instrument names, units and descriptions
+// live in metadata.yaml; run `make generate` after changing them.
 type processorTelemetry struct {
 	meter metric.Meter
 
@@ -24,100 +31,25 @@ type processorTelemetry struct {
 	bucketAvailable metric.Float64ObservableGauge
 }
 
+// newProcessorTelemetry takes a MeterProvider rather than the full
+// component.TelemetrySettings because the generated builder only reads the
+// meter from it, and every call site already has the provider in hand.
 func newProcessorTelemetry(mp metric.MeterProvider) (*processorTelemetry, error) {
-	meter := mp.Meter(meterName)
-
-	receivedItems, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_received_items",
-		metric.WithDescription("Number of items received by the rate limit processor"),
-		metric.WithUnit("{item}"),
-	)
+	ts := component.TelemetrySettings{MeterProvider: mp}
+	tb, err := metadata.NewTelemetryBuilder(ts)
 	if err != nil {
 		return nil, err
 	}
-
-	allowedItems, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_allowed_items",
-		metric.WithDescription("Number of items allowed through by the rate limit processor"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	deniedItems, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_denied_items",
-		metric.WithDescription("Number of items denied by the rate limit processor"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	preservedItems, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_preserved_items",
-		metric.WithDescription("Number of critical items preserved via priority bypass (error spans, error+ logs)"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	backendErrors, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_backend_errors",
-		metric.WithDescription("Transient errors from the rate-limit storage backend (e.g. Redis unreachable while fail-open)"),
-		metric.WithUnit("{error}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	bucketEvictions, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_bucket_evictions",
-		metric.WithDescription("Buckets evicted because the memory backend hit its max_buckets cap"),
-		metric.WithUnit("{bucket}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	failOpenItems, err := meter.Int64Counter(
-		"otelcol_processor_ratelimit_fail_open_items",
-		metric.WithDescription("Items allowed through because the storage backend was unreachable (fail-open) and thus NOT rate-limited"),
-		metric.WithUnit("{item}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	bucketCapacity, err := meter.Float64ObservableGauge(
-		"otelcol_processor_ratelimit_bucket_capacity_tokens",
-		metric.WithDescription("Token-bucket capacity (max tokens == configured limit) for watched keys"),
-		metric.WithUnit("{token}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	bucketAvailable, err := meter.Float64ObservableGauge(
-		"otelcol_processor_ratelimit_bucket_available_tokens",
-		metric.WithDescription("Token-bucket tokens currently available (free) for watched keys; occupied = capacity - available"),
-		metric.WithUnit("{token}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	return &processorTelemetry{
-		meter:           meter,
-		receivedItems:   receivedItems,
-		allowedItems:    allowedItems,
-		deniedItems:     deniedItems,
-		preservedItems:  preservedItems,
-		backendErrors:   backendErrors,
-		bucketEvictions: bucketEvictions,
-		failOpenItems:   failOpenItems,
-		bucketCapacity:  bucketCapacity,
-		bucketAvailable: bucketAvailable,
+		meter:           metadata.Meter(ts),
+		receivedItems:   tb.ProcessorRatelimitReceivedItems,
+		allowedItems:    tb.ProcessorRatelimitAllowedItems,
+		deniedItems:     tb.ProcessorRatelimitDeniedItems,
+		preservedItems:  tb.ProcessorRatelimitPreservedItems,
+		backendErrors:   tb.ProcessorRatelimitBackendErrors,
+		bucketEvictions: tb.ProcessorRatelimitBucketEvictions,
+		failOpenItems:   tb.ProcessorRatelimitFailOpenItems,
+		bucketCapacity:  tb.ProcessorRatelimitBucketCapacityTokens,
+		bucketAvailable: tb.ProcessorRatelimitBucketAvailableTokens,
 	}, nil
 }
