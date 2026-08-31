@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -76,7 +79,7 @@ func TestTraces_PreserveErrors_DropsOnlyNormal(t *testing.T) {
 	cfg := testConfig(3)
 	cfg.PreserveErrors = true
 
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +138,7 @@ func TestTraces_PreserveErrors_Disabled(t *testing.T) {
 	cfg := testConfig(3)
 	cfg.PreserveErrors = false
 
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +161,7 @@ func TestLogs_PreserveErrors_DropsOnlyNormal(t *testing.T) {
 	cfg := testConfig(2)
 	cfg.PreserveErrors = true
 
-	lp, err := newLogsProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	lp, err := newLogsProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +198,7 @@ func TestFairShare_NoisyNeighborCannotStarveOthers(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	// Noisy service asks for 200: should be capped at 20 (its per-key ceiling).
 	noisy := rl.AllowUpToN("noisy-svc", 200)
@@ -250,6 +254,7 @@ func TestFairShare_GlobalCeilingRespected(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	// Single service tries 100, global is 50 → should get 50.
 	if got := rl.AllowUpToN("svc-x", 100); got != 50 {
@@ -301,7 +306,7 @@ func TestIntegration_PriorityAndFairShare(t *testing.T) {
 
 	mp, _ := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -67,7 +70,7 @@ func TestMetricKey_Allowlist(t *testing.T) {
 // slice into the lookup set, and an empty slice stays unbounded (nil set).
 func TestMetricsKeyAllowlist_BuiltFromConfig(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	storage := testStorage()
+	storage := testStorage(t)
 	defer func() { _ = storage.Close() }()
 
 	withList := createDefaultConfig().(*Config)
@@ -141,7 +144,7 @@ func TestKeyLabelsOn_Validation(t *testing.T) {
 // processor so the per-counter decision is available on the hot path.
 func TestKeyLabelOn_BuiltFromConfig(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	storage := testStorage()
+	storage := testStorage(t)
 	defer func() { _ = storage.Close() }()
 
 	cfg := createDefaultConfig().(*Config) // default: denied + preserved
@@ -215,7 +218,7 @@ func TestBucketGauges_Exported(t *testing.T) {
 		MetricsKeyAllowlist: []string{"my-svc"},
 		SpecificLimits:      map[string]LimitConfig{},
 	}
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +253,7 @@ func TestBucketGauges_OffWithoutAllowlist(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
 
-	tp, err := newTracesProcessor(testConfig(2), zap.NewNop(), mp, testStorage(), sink) // no allowlist
+	tp, err := newTracesProcessor(testConfig(2), zap.NewNop(), mp, testStorage(t), sink) // no allowlist
 	if err != nil {
 		t.Fatal(err)
 	}
