@@ -1,7 +1,7 @@
-# Gateway com regras de descarte compartilhadas no Redis: o `filter` do contrib
-# guarda as expressoes no proprio arquivo, entao calar um servico que comecou a
-# inundar a pipeline exige editar config e rolar todos os coletores. Aqui uma
-# escrita no Redis basta e as replicas convergem dentro do refresh_interval.
+# Gateway with drop rules shared through Redis. Contrib's `filter` keeps its
+# expressions in the config file, so silencing a service that started flooding
+# the pipeline means editing config and rolling every collector. Here a single
+# Redis write is enough and replicas converge within refresh_interval.
 
 extensions:
   health_check:
