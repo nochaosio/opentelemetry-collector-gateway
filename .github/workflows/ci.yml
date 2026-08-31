@@ -23,7 +23,7 @@ jobs:
         module: [ratelimitprocessor, statefulfilterprocessor]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: processor/${{ matrix.module }}/go.mod
           cache-dependency-path: processor/${{ matrix.module }}/go.sum
@@ -40,7 +40,7 @@ jobs:
         module: [ratelimitprocessor, statefulfilterprocessor]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: processor/${{ matrix.module }}/go.mod
       - uses: golangci/golangci-lint-action@v9
@@ -54,7 +54,7 @@ jobs:
     needs: [unit-tests, lint]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: processor/ratelimitprocessor/go.mod
       - name: install OCB
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: processor/ratelimitprocessor/go.mod
       - name: install govulncheck
