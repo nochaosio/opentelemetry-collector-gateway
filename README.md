@@ -2,10 +2,31 @@
 
 A contrib-based OpenTelemetry Collector distribution standing at the front door of your observability pipeline
 
+## Built on
+
+This distribution is assembled with the [OpenTelemetry Collector Builder][ocb]
+from two upstream projects, consumed as Go module dependencies:
+
+- [open-telemetry/opentelemetry-collector][core], the collector core: the
+  service, pipeline plumbing, OTLP receiver and exporters, and the `batch` and
+  `memory_limiter` processors.
+- [open-telemetry/opentelemetry-collector-contrib][contrib], the community
+  components: Kafka, load balancing, Prometheus remote write, tail sampling,
+  the routing and span metrics connectors, and the auth extensions.
+
+Both are Apache-2.0. Their source is not vendored here; see [NOTICE](NOTICE).
+
 ## Components
 
 The receivers, exporters, extensions, connectors, and processors bundled in this
 distribution, and why each one is here, are listed in [COMPONENTS.md](COMPONENTS.md).
+
+The two processors that are ours, and exist because contrib has no equivalent:
+
+| Component | What it adds |
+|-----------|--------------|
+| [`ratelimit`](processor/ratelimitprocessor/) | Per-key token-bucket limiting with priority bypass, fair share, and optional Redis-backed shared state |
+| [`statefulfilter`](processor/statefulfilterprocessor/) | Drop rules held in Redis, so muting a service does not need a config roll |
 
 ## Quick start
 
@@ -32,4 +53,9 @@ deliberately should not spend rate-limit budget that legitimate traffic needs.
 
 ## License
 
-[Apache License 2.0](LICENSE). Third-party attributions are in [NOTICE](NOTICE).
+[Apache License 2.0](LICENSE), the same license as the OpenTelemetry projects
+this builds on. Third-party attributions are in [NOTICE](NOTICE).
+
+[ocb]: https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder
+[core]: https://github.com/open-telemetry/opentelemetry-collector
+[contrib]: https://github.com/open-telemetry/opentelemetry-collector-contrib
