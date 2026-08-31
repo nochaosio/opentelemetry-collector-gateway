@@ -1,0 +1,33 @@
+# golangci-lint v2 config.
+# Conservative by design — noisy linters slow reviews without catching
+# real bugs. The goal is correctness + security + simple idioms.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - bodyclose
+    - gocritic
+    - gosec
+  settings:
+    gocritic:
+      enabled-tags: [diagnostic, style, performance]
+      disabled-checks:
+        - ifElseChain
+        - hugeParam
+    gosec:
+      excludes:
+        - G115  # integer overflow (mostly fine in our bounded counters)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck, gosec, gocritic]

@@ -1,0 +1,14 @@
+.git
+.github
+.vscode
+.idea
+**/*.test
+**/*.out
+**/*.coverprofile
+benchmarks/results
+processor/ratelimitprocessor/e2e/results
+# Keep playground/ in the build context: the playground image's Dockerfile
+# COPYs playground/collector-config.yaml. Only ignore its transient outputs.
+playground/grafana_data
+playground/prometheus_data
+cmd/otelcol-gateway/otelcol-gateway

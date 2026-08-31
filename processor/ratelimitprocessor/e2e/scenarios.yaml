@@ -1,0 +1,241 @@
+# Rate Limit Processor — E2E Test Scenarios
+#
+# Each scenario uses a dedicated gRPC port (4320–4328).
+# The runner reads this file, starts the collector, runs telemetrygen for each
+# scenario, and validates the Prometheus metrics on the collector's endpoint.
+#
+# Prerequisites:
+#   - otelcol-gateway binary built (run 'make build' from project root)
+#   - telemetrygen installed:
+#       go install github.com/open-telemetry/opentelemetry-collector-contrib/cmd/telemetrygen@latest
+#   - Python 3 + pyyaml (use the virtualenv):
+#       python3 -m venv .venv && source .venv/bin/activate
+#       pip install -r requirements.txt
+#
+# How to run:
+#   cd processor/ratelimitprocessor/e2e
+#   source .venv/bin/activate
+#   python3 run_tests.py
+#
+# Note on telemetrygen batching:
+#   telemetrygen batches traces before exporting via gRPC. The rate limiter
+#   evaluates an entire batch atomically with AllowN(spanCount). If the batch
+#   is larger than the available tokens, the whole batch is denied. As a result:
+#   - The first mini-batch (≈2 spans) typically passes through
+#   - Subsequent batches (≈20 spans) are denied when the bucket holds < 20 tokens
+#   The expected values below reflect this real telemetrygen behaviour.
+
+settings:
+  # Path relative to this file's directory
+  binary: "../../../cmd/otelcol-gateway/otelcol-gateway"
+  config: "collector-config.yaml"
+  metrics_address: "http://localhost:8888/metrics"
+  startup_wait_seconds: 4
+  scenario_settle_seconds: 2
+
+scenarios:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. service_name — RPS limit with drop
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: svc_rps_drop
+    name: "service_name — RPS limit with drop_on_limit: true"
+    description: >
+      Traces for 'payment-service' are limited to 5 RPS (initial bucket = 5 tokens).
+      telemetrygen sends at 20 RPS for 3s (~60 total) with default batching enabled.
+      The first mini-batch (≈2 spans) passes; subsequent batches (≈20 spans) are
+      denied because they exceed the available tokens. Validates: denied > 0 (drop works).
+    port: 4320
+    signal: traces
+    telemetrygen:
+      service_name: "payment-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 10
+      denied_min: 40
+    metric_key: "payment-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. specific_limits — lower limit for a specific key
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: svc_specific_lower
+    name: "service_name — specific_limits lowers limit for legacy-service (2 RPS)"
+    description: >
+      Default is 10 RPS, but legacy-service has a specific limit of 2 RPS (bucket = 2).
+      The first mini-batch (≈2 spans) exhausts the bucket exactly;
+      subsequent batches are denied. Validates: denied > 0 and allowed is small.
+    port: 4321
+    signal: traces
+    telemetrygen:
+      service_name: "legacy-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 8
+      denied_min: 40
+    metric_key: "legacy-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. specific_limits — higher limit for a specific key
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: svc_specific_higher
+    name: "service_name — specific_limits raises limit for premium-service (50 RPS)"
+    description: >
+      Default is 5 RPS, but premium-service has a specific limit of 50 RPS.
+      With bucket = 50 (larger than the typical telemetrygen batch size of ≈20),
+      multiple batches pass through. Validates: allowed >> svc_rps_drop scenario,
+      proving that specific_limits effectively raises the ceiling for the service.
+    port: 4322
+    signal: traces
+    telemetrygen:
+      service_name: "premium-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 30
+      allowed_max: 65
+      denied_min: 0
+    metric_key: "premium-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. Monitor mode (drop_on_limit: false)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: monitor_mode
+    name: "drop_on_limit: false — all traces pass through (observability mode)"
+    description: >
+      With drop_on_limit=false, NO trace is dropped even when the limit is exceeded.
+      The processor still increments 'denied' for observability, but forwards
+      everything. allowed ≈ received.
+      denied > 0 is CORRECT behaviour in monitor mode — it does not indicate a failure.
+    port: 4323
+    signal: traces
+    telemetrygen:
+      service_name: "monitored-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 50
+      allowed_max: 70
+      denied_min: 0
+      # denied_max is intentionally absent — denied > 0 is expected in monitor mode
+    metric_key: "monitored-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. requests_per_minute — global RPM budget
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: rpm_limit
+    name: "requests_per_minute — 30 RPM budget"
+    description: >
+      Budget of 30 items/minute (initial bucket = 30 tokens).
+      requests_per_second: 0 is required so that the createDefaultConfig default
+      of 100 RPS does not silently override the requests_per_minute setting.
+      With 30 initial tokens: mini-batch(2) + batch(20) = 22 pass through;
+      subsequent batches are denied. Validates: allowed ≈ 20–25, denied > 0.
+    port: 4324
+    signal: traces
+    telemetrygen:
+      service_name: "rpm-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 15
+      allowed_max: 35
+      denied_min: 15
+    metric_key: "rpm-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 6. requests_per_minute — specific_limits per-minute override
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: rpm_specific_override
+    name: "requests_per_minute — specific_limits: slow-service capped at 10 RPM"
+    description: >
+      Default is 60 RPM, but slow-service has a specific limit of 10 RPM (bucket = 10).
+      Mini-batch(2) passes; batch(20) > 10 tokens → denied.
+      Validates that specific_limits works independently with per-minute periods.
+    port: 4325
+    signal: traces
+    telemetrygen:
+      service_name: "slow-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 12
+      denied_min: 40
+    metric_key: "slow-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 7. default_limit with period: second
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: default_limit_second
+    name: "default_limit with default_limit_period: second"
+    description: >
+      Alternative configuration using default_limit=5 + default_limit_period=second
+      instead of requests_per_second. Requires requests_per_second: 0 to override
+      the 100 RPS default inherited from createDefaultConfig.
+      Behaviour is equivalent to svc_rps_drop: denied > 0.
+    port: 4326
+    signal: traces
+    telemetrygen:
+      service_name: "default-sec-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 10
+      denied_min: 40
+    metric_key: "default-sec-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 8. default_limit with period: minute
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: default_limit_minute
+    name: "default_limit with default_limit_period: minute"
+    description: >
+      Alternative configuration using default_limit=10 + default_limit_period=minute.
+      Initial bucket = 10. Mini-batch(2) passes; batch(20) > 10 → denied.
+      Requires requests_per_second: 0 to override the createDefaultConfig default.
+    port: 4327
+    signal: traces
+    telemetrygen:
+      service_name: "default-min-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 12
+      denied_min: 40
+    metric_key: "default-min-service"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 9. Missing attribute key → fallback to "default" bucket
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: attr_missing_fallback
+    name: "limit_type: attribute — missing key falls back to 'default' bucket"
+    description: >
+      Processor configured with limit_type=attribute, attribute_key=tenant.id.
+      telemetrygen does not send tenant.id (only service.name) → extractKey
+      returns "default" → the default bucket with 5 RPS is used.
+      Validates: denied > 0 (rate limiting works even without an explicit key).
+    port: 4328
+    signal: traces
+    telemetrygen:
+      service_name: "no-tenant-service"
+      rate: 20
+      duration: "3s"
+      workers: 1
+    expected:
+      allowed_min: 0
+      allowed_max: 10
+      denied_min: 40
+    metric_key: "default"

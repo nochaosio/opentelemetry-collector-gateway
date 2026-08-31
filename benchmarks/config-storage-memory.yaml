@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:7317
+
+processors:
+  ratelimit:
+    limit_type: service_name
+    # Default (every service not listed below): 20 rps
+    requests_per_second: 20
+    drop_on_limit: true
+    preserve_errors: false
+    specific_limits:
+      # Override: the "premium" service gets a larger budget.
+      premium-svc:
+        requests_per_second: 200
+      # Override: a stricter cap for a legacy/noisy service.
+      legacy-svc:
+        requests_per_second: 5
+    storage:
+      backend: memory
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 9888
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [ratelimit]
+      exporters: [debug]

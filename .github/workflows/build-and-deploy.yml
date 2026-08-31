@@ -1,0 +1,113 @@
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      registry: ${{ steps.v.outputs.registry }}
+    steps:
+      - id: v
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "version=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: otelcol-gateway
+            context: .
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # - uses: docker/login-action@v4
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ needs.version.outputs.registry }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
+            ${{ needs.version.outputs.registry }}/${{ matrix.image }}:latest
+          # tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  update-manifests:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check environment repo credential
+        id: gate
+        env:
+          ENVIRONMENT_PAT: ${{ secrets.ENVIRONMENT_PAT }}
+        run: |
+          if [ -z "$ENVIRONMENT_PAT" ]; then
+            echo "::warning::ENVIRONMENT_PAT is not set; skipping the manifest bump"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Notify Discord (bump started)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REGISTRY: ${{ needs.version.outputs.registry }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then echo "DISCORD_WEBHOOK_URL is not set; skipping notification"; exit 0; fi
+          MSG="🦆 CI **opentelemetry-collector-gateway** applying image(s) \`${REGISTRY}/otelcol-gateway\` at tag \`${VERSION}\` under \`DEPLOYMENT_PATH\` in the environment repo"
+          payload=$(jq -n --arg c "$MSG" '{content: $c}')
+          curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+      - name: Checkout environment repo
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: ORG/DEPLOYMENT_REPO
+          token: ${{ secrets.ENVIRONMENT_PAT }}
+          path: environment
+      - name: Bump image tags
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          REGISTRY: ${{ needs.version.outputs.registry }}
+        run: |
+          cd DEPLOYMENT_PATH
+          for img in otelcol-gateway; do
+            sed -i -E "s#([[:space:]]image:[[:space:]]*)[^[:space:]]*${img}:[A-Za-z0-9._-]+#\1${REGISTRY}/${img}:${VERSION}#g" *.yaml
+          done
+          echo "---- diff ----"; git -C "$GITHUB_WORKSPACE/environment" --no-pager diff || true
+      - name: Commit and push
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          cd environment
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add DEPLOYMENT_PATH
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "ci(opentelemetry-collector-gateway): bump images to ${VERSION}"
+          git push

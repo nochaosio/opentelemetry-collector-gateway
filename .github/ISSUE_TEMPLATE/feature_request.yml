@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a new capability or behavioral change.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This distribution stays small on purpose. New features need a
+        concrete user-visible outcome that pays for the cost they add
+        (binary size, RAM, complexity). Please make that case below.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to achieve? Why is the current gateway not enough?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: A sketch of the solution. Config surface, defaults, trade-offs.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you look at? Why did you pass on those?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Out of scope
+      description: What you are explicitly NOT asking for. Helps keep the discussion focused.

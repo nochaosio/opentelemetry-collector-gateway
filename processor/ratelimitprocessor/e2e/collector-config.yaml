@@ -1,0 +1,212 @@
+# Collector config for ratelimitprocessor E2E tests
+#
+# Each scenario in scenarios.yaml has:
+#   - A dedicated gRPC receiver (ports 4320–4328)
+#   - A ratelimit processor with the scenario's configuration
+#   - An isolated pipeline (traces)
+#
+# Collector metrics exposed at :8888 (Prometheus scrape)
+
+receivers:
+  # Scenario 1: svc_rps_drop — service_name, 5 RPS, drop=true
+  otlp/svc-rps-drop:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4320
+
+  # Scenario 2: svc_specific_lower — specific_limits legacy=2 RPS
+  otlp/svc-specific-lower:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4321
+
+  # Scenario 3: svc_specific_higher — specific_limits premium=50 RPS
+  otlp/svc-specific-higher:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4322
+
+  # Scenario 4: monitor_mode — drop_on_limit=false
+  otlp/monitor-mode:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4323
+
+  # Scenario 5: rpm_limit — 30 RPM global
+  otlp/rpm-limit:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4324
+
+  # Scenario 6: rpm_specific_override — specific_limits slow=10 RPM
+  otlp/rpm-specific:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4325
+
+  # Scenario 7: default_limit_second — default_limit=5, period=second
+  otlp/default-limit-sec:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4326
+
+  # Scenario 8: default_limit_minute — default_limit=10, period=minute
+  otlp/default-limit-min:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4327
+
+  # Scenario 9: attr_missing_fallback — attribute=tenant.id, missing key → "default" bucket
+  otlp/attr-fallback:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4328
+
+processors:
+  # Scenario 1
+  ratelimit/svc-rps-drop:
+    limit_type: service_name
+    requests_per_second: 5
+    drop_on_limit: true
+
+  # Scenario 2
+  ratelimit/svc-specific-lower:
+    limit_type: service_name
+    requests_per_second: 10
+    drop_on_limit: true
+    specific_limits:
+      legacy-service:
+        requests_per_second: 2
+
+  # Scenario 3
+  # specific_limit=50 RPS (> typical telemetrygen batch size of ~20 spans)
+  # allows multiple batches through, clearly differentiating from the 5 RPS default limit
+  ratelimit/svc-specific-higher:
+    limit_type: service_name
+    requests_per_second: 5
+    drop_on_limit: true
+    specific_limits:
+      premium-service:
+        requests_per_second: 50
+
+  # Scenario 4
+  ratelimit/monitor-mode:
+    limit_type: service_name
+    requests_per_second: 3
+    drop_on_limit: false
+
+  # Scenario 5
+  # requests_per_second: 0 is required to override the 100 RPS default set by
+  # createDefaultConfig(), which would otherwise take precedence over requests_per_minute
+  ratelimit/rpm-limit:
+    limit_type: service_name
+    requests_per_second: 0
+    requests_per_minute: 30
+    drop_on_limit: true
+
+  # Scenario 6
+  ratelimit/rpm-specific:
+    limit_type: service_name
+    requests_per_second: 0
+    requests_per_minute: 60
+    drop_on_limit: true
+    specific_limits:
+      slow-service:
+        requests_per_minute: 10
+
+  # Scenario 7
+  # requests_per_second: 0 prevents the 100 RPS default (createDefaultConfig)
+  # from taking precedence over default_limit
+  ratelimit/default-limit-sec:
+    limit_type: service_name
+    requests_per_second: 0
+    default_limit: 5
+    default_limit_period: second
+    drop_on_limit: true
+
+  # Scenario 8
+  ratelimit/default-limit-min:
+    limit_type: service_name
+    requests_per_second: 0
+    default_limit: 10
+    default_limit_period: minute
+    drop_on_limit: true
+
+  # Scenario 9
+  ratelimit/attr-fallback:
+    limit_type: attribute
+    attribute_key: tenant.id
+    requests_per_second: 5
+    drop_on_limit: true
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+    logs:
+      level: warn
+
+  pipelines:
+    # Scenario 1
+    traces/svc-rps-drop:
+      receivers: [otlp/svc-rps-drop]
+      processors: [ratelimit/svc-rps-drop]
+      exporters: [debug]
+
+    # Scenario 2
+    traces/svc-specific-lower:
+      receivers: [otlp/svc-specific-lower]
+      processors: [ratelimit/svc-specific-lower]
+      exporters: [debug]
+
+    # Scenario 3
+    traces/svc-specific-higher:
+      receivers: [otlp/svc-specific-higher]
+      processors: [ratelimit/svc-specific-higher]
+      exporters: [debug]
+
+    # Scenario 4
+    traces/monitor-mode:
+      receivers: [otlp/monitor-mode]
+      processors: [ratelimit/monitor-mode]
+      exporters: [debug]
+
+    # Scenario 5
+    traces/rpm-limit:
+      receivers: [otlp/rpm-limit]
+      processors: [ratelimit/rpm-limit]
+      exporters: [debug]
+
+    # Scenario 6
+    traces/rpm-specific:
+      receivers: [otlp/rpm-specific]
+      processors: [ratelimit/rpm-specific]
+      exporters: [debug]
+
+    # Scenario 7
+    traces/default-limit-sec:
+      receivers: [otlp/default-limit-sec]
+      processors: [ratelimit/default-limit-sec]
+      exporters: [debug]
+
+    # Scenario 8
+    traces/default-limit-min:
+      receivers: [otlp/default-limit-min]
+      processors: [ratelimit/default-limit-min]
+      exporters: [debug]
+
+    # Scenario 9
+    traces/attr-fallback:
+      receivers: [otlp/attr-fallback]
+      processors: [ratelimit/attr-fallback]
+      exporters: [debug]

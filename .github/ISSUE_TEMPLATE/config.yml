@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/nochaosio/opentelemetry-collector-gateway/security/advisories/new
+    about: Report suspected vulnerabilities privately. Do NOT open a public issue.
+  - name: Upstream OpenTelemetry Collector issues
+    url: https://github.com/open-telemetry/opentelemetry-collector/issues
+    about: For bugs in upstream components (not our ratelimit processor), file upstream first.

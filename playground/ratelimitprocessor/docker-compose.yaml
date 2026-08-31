@@ -1,0 +1,40 @@
+# Local lab for the ratelimit processor. The image is built from the repo root
+# Dockerfile; the config is mounted, so editing collector-config.yaml only needs
+# `docker compose restart gateway`.
+services:
+  gateway:
+    build:
+      context: ../..
+    image: otelcol-gateway:dev
+    container_name: ratelimit-gateway
+    ports:
+      - "4318:4318"   # scenario 1 + 2: per service.name
+      - "4319:4319"   # scenario 3: monitor mode
+      - "4320:4320"   # scenario 4: per tenant.id
+      - "4321:4321"   # scenario 5: error bypass
+      - "4322:4322"   # scenario 6: Redis-backed bucket
+      - "13133:13133" # health check
+      - "8888:8888"   # Prometheus self-telemetry
+    volumes:
+      - ./collector-config.yaml:/etc/otelcol-gateway/config.yaml:ro
+    depends_on:
+      - redis
+
+  # Second replica, same config. Only used by scenario 6: it proves that the
+  # Redis-backed bucket is shared, while the in-memory ones are not.
+  gateway-b:
+    build:
+      context: ../..
+    image: otelcol-gateway:dev
+    container_name: ratelimit-gateway-b
+    ports:
+      - "4323:4322"   # scenario 6 on the second replica
+      - "8889:8888"
+    volumes:
+      - ./collector-config.yaml:/etc/otelcol-gateway/config.yaml:ro
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: ratelimit-redis

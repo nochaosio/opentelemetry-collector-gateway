@@ -1,0 +1,119 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: unit tests (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [ratelimitprocessor, statefulfilterprocessor]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: processor/${{ matrix.module }}/go.mod
+          cache-dependency-path: processor/${{ matrix.module }}/go.sum
+      - name: go test -race
+        working-directory: processor/${{ matrix.module }}
+        run: go test -race -count=1 ./...
+
+  lint:
+    name: lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [ratelimitprocessor, statefulfilterprocessor]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: processor/${{ matrix.module }}/go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: processor/${{ matrix.module }}
+
+  build:
+    name: build (OCB)
+    runs-on: ubuntu-latest
+    needs: [unit-tests, lint]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: processor/ratelimitprocessor/go.mod
+      - name: install OCB
+        run: |
+          OCB_VERSION="$(awk -F':= ' '/OCB_VERSION/ {print $2}' Makefile)"
+          go install "go.opentelemetry.io/collector/cmd/builder@${OCB_VERSION}"
+      - name: build
+        run: $HOME/go/bin/builder --config builder-config.yaml
+      - name: binary smoke test
+        run: |
+          ./cmd/otelcol-gateway/otelcol-gateway --help >/dev/null
+          ls -lh ./cmd/otelcol-gateway/otelcol-gateway
+      - name: validate default config
+        run: ./cmd/otelcol-gateway/otelcol-gateway validate --config config/otelcol-gateway.yaml
+
+  govulncheck:
+    name: vulnerability scan (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: processor/ratelimitprocessor/go.mod
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      # Gate wrapper: fails on symbol-reachable findings except the ones
+      # allowlisted (with justification) in .govulncheck-ignore.
+      - name: scan ratelimit processor
+        run: GOVULNCHECK=$HOME/go/bin/govulncheck scripts/govulncheck.sh processor/ratelimitprocessor
+      - name: scan statefulfilter processor
+        run: GOVULNCHECK=$HOME/go/bin/govulncheck scripts/govulncheck.sh processor/statefulfilterprocessor
+      - name: scan distribution
+        run: GOVULNCHECK=$HOME/go/bin/govulncheck scripts/govulncheck.sh cmd/otelcol-gateway
+
+  docker:
+    name: docker image (build + trivy scan)
+    runs-on: ubuntu-latest
+    needs: [unit-tests, lint]
+    steps:
+      - uses: actions/checkout@v7
+      - name: build image
+        run: docker build -t otelcol-gateway:ci .
+      # Trivy runs from its official image (no third-party action to pin):
+      # fail the build on HIGH/CRITICAL vulnerabilities with a fix available.
+      - name: trivy scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image \
+            --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed \
+            otelcol-gateway:ci
+      # SBOM (SPDX) for the built image, kept as a build artifact.
+      - name: generate sbom
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/out" \
+            anchore/syft:latest otelcol-gateway:ci -o spdx-json=/out/sbom.spdx.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: sbom.spdx.json

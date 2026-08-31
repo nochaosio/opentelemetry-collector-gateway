@@ -1,0 +1,60 @@
+# Scenario D, gateway arm: cap the noisy service instead of deleting or
+# sampling it. Every other service keeps its full budget.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:34317
+        max_recv_msg_size_mib: 32
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+  ratelimit:
+    limit_type: service_name
+    requests_per_second: 1000000
+    drop_on_limit: true
+    preserve_errors: false
+    # permanent keeps the generator from resending what was deliberately
+    # dropped, which would inflate the IN side of the ratio.
+    rejection_mode: permanent
+    specific_limits:
+      # legacy-svc runs at 12k spans/s and triples to 36k on the bad deploy.
+      # The ceiling sits between the two: quiet times pass, the surge is clipped.
+      legacy-svc:
+        requests_per_second: 18000
+    storage:
+      backend: memory
+  batch:
+    timeout: 1s
+    send_batch_size: 2048
+
+exporters:
+  otlp:
+    endpoint: 127.0.0.1:34417
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 8
+      queue_size: 20000
+
+service:
+  telemetry:
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 38888
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, ratelimit, batch]
+      exporters: [otlp]
