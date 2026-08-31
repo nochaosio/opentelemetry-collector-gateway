@@ -69,7 +69,7 @@ cardinality bomb. Four composable knobs bound it:
 - **`metrics_verbosity`** (default `detailed`): the single switch. `basic` removes
   `key` from **all** counters and disables the bucket gauges — a handful of series
   per signal regardless of key count; the knobs below become inert. Rate limiting
-  itself is unaffected. Full metrics table: [metric.md](metric.md).
+  itself is unaffected. Full metrics table: [metrics.md](metrics.md).
 - **`key_labels_on`** (default `[denied, preserved]`): which counters carry `key` at
   all. Counters not listed are emitted **aggregated** (no `key`). Default keeps `key`
   only where it's naturally bounded (the few keys that actually hit the limit / shed

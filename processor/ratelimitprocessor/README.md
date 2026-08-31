@@ -1,9 +1,14 @@
 # Rate Limit Processor
 
-| Status | |
-|---|---|
-| Stability | `beta` |
-| Supported signals | traces, metrics, logs |
+| Status        |           |
+| ------------- |-----------|
+| Stability     | [beta]: traces, metrics, logs |
+| Distributions | [nochaos-gateway] |
+| Issues        | [![Open issues](https://img.shields.io/github/issues-search/nochaosio/opentelemetry-collector-gateway?query=is%3Aissue%20is%3Aopen%20label%3Aprocessor%2Fratelimit&label=open&color=orange&logo=opentelemetry)](https://github.com/nochaosio/opentelemetry-collector-gateway/issues?q=is%3Aopen+is%3Aissue+label%3Aprocessor%2Fratelimit) |
+| Code Owners   | [@apolzek](https://www.github.com/apolzek) |
+
+[beta]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/component-stability.md#beta
+[nochaos-gateway]: https://github.com/nochaosio/opentelemetry-collector-gateway
 
 A processor for the OpenTelemetry Collector Gateway that implements per-key rate limiting using a token bucket algorithm, similar to how nginx, HAProxy, or Envoy handle traffic shaping.
 
@@ -45,7 +50,7 @@ A processor for the OpenTelemetry Collector Gateway that implements per-key rate
 | `metrics_key_allowlist` | []string | Bounds the *values* of the `key` metric label: only listed keys keep their value, the rest collapse to `other`. See [Controlling metric cardinality](#controlling-metric-cardinality) | No |
 | `max_metric_keys` | int | Cardinality backstop when `metrics_key_allowlist` is **not** set: the first N distinct keys keep their value in the `key` label, later ones collapse to `other`. `0` = default (`100`); negative = unlimited (not recommended) | No |
 | `key_labels_on` | []string | Which counters carry the `key` label: subset of `received`, `allowed`, `denied`, `preserved` (default `[denied, preserved]`). Others are emitted aggregated. See [Controlling metric cardinality](#controlling-metric-cardinality) | No |
-| `metrics_verbosity` | string | Single-switch cardinality control for the processor's own metrics: `detailed` (default; `key` label per `key_labels_on`, bucket gauges on) or `basic` (no `key` label anywhere, no bucket gauges — a handful of series per signal regardless of key count). See [metric.md](metric.md) | No |
+| `metrics_verbosity` | string | Single-switch cardinality control for the processor's own metrics: `detailed` (default; `key` label per `key_labels_on`, bucket gauges on) or `basic` (no `key` label anywhere, no bucket gauges — a handful of series per signal regardless of key count). See [docs/metrics.md](docs/metrics.md) | No |
 | `storage.backend` | string | `memory` (default, in-process) or `redis` (shared across replicas) | No |
 | `storage.max_buckets` | int | Memory backend only. Hard cap on the number of live buckets; evicts the oldest when full, so a hostile/buggy producer spraying unique keys can't OOM the collector. Default `100000` | No |
 | `storage.redis.tls` | object | Optional TLS for the Redis connection (standard collector TLS config: `ca_file`, `cert_file`, `key_file`, ...). Keeps rate-limit state off the wire in clear | No |
@@ -98,7 +103,7 @@ This is the practical answer to "is a single service bombarding my collectors be
 
 ## Manual testing
 
-For copy-pasteable recipes that reproduce every scenario on a laptop in under a minute (basic limit, overrides, monitor mode, priority bypass, fair share, token refill, memory vs Redis storage, fail-open, negative cache, attribute/header limits), see [`TESTING.md`](TESTING.md).
+For copy-pasteable recipes that reproduce every scenario on a laptop in under a minute (basic limit, overrides, monitor mode, priority bypass, fair share, token refill, memory vs Redis storage, fail-open, negative cache, attribute/header limits), see [`docs/testing.md`](docs/testing.md).
 
 ## Examples
 
@@ -286,7 +291,7 @@ The `key` label carries a client-controlled value (service name / attribute / he
 metrics_verbosity: basic     # default: detailed
 ```
 
-`basic` removes the `key` label from **all** counters (aggregated by signal/priority/limit_type only) and disables the per-key token-bucket gauges — worst-case series count drops to a handful per signal, no matter how many keys exist. Rate limiting itself is unaffected (every key keeps its own bucket), and per-key attribution remains available in the throttled over-limit warn logs. Use the finer levers below when you want per-key visibility with bounded cost; use `basic` when the metrics backend is cardinality-sensitive, and see [metric.md](metric.md) for the full metrics reference.
+`basic` removes the `key` label from **all** counters (aggregated by signal/priority/limit_type only) and disables the per-key token-bucket gauges — worst-case series count drops to a handful per signal, no matter how many keys exist. Rate limiting itself is unaffected (every key keeps its own bucket), and per-key attribution remains available in the throttled over-limit warn logs. Use the finer levers below when you want per-key visibility with bounded cost; use `basic` when the metrics backend is cardinality-sensitive, and see [docs/metrics.md](docs/metrics.md) for the full metrics reference.
 
 **1. `key_labels_on`: which counters carry the `key` label at all.**
 

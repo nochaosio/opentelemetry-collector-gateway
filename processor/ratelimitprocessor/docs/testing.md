@@ -2,7 +2,7 @@
 
 Hands-on recipes to reproduce every supported scenario on your laptop in under a minute. Each scenario gives you a minimal YAML, a traffic command, the Prometheus query, and the number you should see — so you can spot regressions at a glance.
 
-For the automated Python suite (9 canned scenarios) see [`e2e/`](e2e/). This document is for **ad-hoc manual verification**.
+For the automated Python suite (9 canned scenarios) see [`e2e/`](../e2e/). This document is for **ad-hoc manual verification**.
 
 ---
 
