@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/processor/processorhelper"
 
 	"github.com/nochaosio/opentelemetry-collector-gateway/processor/ratelimitprocessor/internal/metadata"
 )
@@ -51,7 +52,15 @@ func createTracesProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newTracesProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	p, err := newTracesProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewTraces(ctx, set, cfg, nextConsumer, p.processTraces,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }
 
 func createMetricsProcessor(
@@ -64,7 +73,15 @@ func createMetricsProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newMetricsProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	p, err := newMetricsProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewMetrics(ctx, set, cfg, nextConsumer, p.processMetrics,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }
 
 func createLogsProcessor(
@@ -77,5 +94,13 @@ func createLogsProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newLogsProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	p, err := newLogsProcessor(oCfg, set.Logger, set.MeterProvider, storage, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewLogs(ctx, set, cfg, nextConsumer, p.processLogs,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }

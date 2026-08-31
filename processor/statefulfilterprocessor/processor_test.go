@@ -57,10 +57,10 @@ type staticStore struct {
 	closed bool
 }
 
-func (s *staticStore) current() *ruleSet                  { return s.rs }
-func (s *staticStore) initialLoad(context.Context) error  { return nil }
-func (s *staticStore) start()                             {}
-func (s *staticStore) close() error                       { s.closed = true; return nil }
+func (s *staticStore) current() *ruleSet                 { return s.rs }
+func (s *staticStore) initialLoad(context.Context) error { return nil }
+func (s *staticStore) start()                            {}
+func (s *staticStore) close() error                      { s.closed = true; return nil }
 func (s *staticStore) stats() storeStats {
 	return storeStats{
 		version:     s.rs.version,
@@ -407,7 +407,7 @@ func TestStart_FailOpenWhenInitialLoadFails(t *testing.T) {
 
 	// Default posture: a rule-store outage must not stop the gateway from
 	// accepting telemetry.
-	if err := tp.Start(context.Background(), nil); err != nil {
+	if err := tp.start(context.Background(), nil); err != nil {
 		t.Fatalf("expected fail-open start, got %v", err)
 	}
 }
@@ -422,7 +422,7 @@ func TestStart_FailClosedWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTracesProcessor: %v", err)
 	}
-	if err := tp.Start(context.Background(), nil); err == nil {
+	if err := tp.start(context.Background(), nil); err == nil {
 		t.Fatal("expected startup to fail when fail_closed_on_empty is set")
 	}
 }
@@ -433,7 +433,7 @@ func TestShutdown_ClosesStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTracesProcessor: %v", err)
 	}
-	if err := tp.Shutdown(context.Background()); err != nil {
+	if err := tp.shutdown(context.Background()); err != nil {
 		t.Fatalf("Shutdown: %v", err)
 	}
 	if !store.closed {
