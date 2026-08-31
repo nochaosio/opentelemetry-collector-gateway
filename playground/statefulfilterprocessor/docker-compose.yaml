@@ -1,0 +1,23 @@
+# Local lab for the statefulfilter processor: one gateway + the Redis that
+# holds the drop rules. The config is mounted, so editing collector-config.yaml
+# only needs `docker compose restart gateway`.
+services:
+  gateway:
+    build:
+      context: ../..
+    image: otelcol-gateway:dev
+    container_name: statefulfilter-gateway
+    ports:
+      - "4318:4318"   # OTLP HTTP
+      - "13133:13133" # health check
+      - "8888:8888"   # Prometheus self-telemetry
+    volumes:
+      - ./collector-config.yaml:/etc/otelcol-gateway/config.yaml:ro
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: statefulfilter-redis
+    ports:
+      - "6379:6379"   # so `redis-cli` from the host works too

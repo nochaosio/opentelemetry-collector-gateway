@@ -1,0 +1,76 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Localhost on purpose: heap profiles can carry telemetry payloads, and the
+  # endpoint is a DoS vector. Reach it through `kubectl port-forward`.
+  pprof:
+    endpoint: 127.0.0.1:1777
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Must be the first processor in every pipeline: when an exporter stalls,
+  # the batch queues grow until the pod is OOM-killed.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  ratelimit:
+    limit_type: service_name
+    requests_per_second: 5
+    drop_on_limit: true
+    specific_limits:
+      payment-service:
+        requests_per_second: 2
+      legacy-service:
+        requests_per_second: 1
+    # Only these services get their own `key` label on the exported metrics;
+    # every other one is reported as key="other". Rate limiting is unaffected —
+    # this keeps the Prometheus series count from following service count.
+    metrics_key_allowlist:
+      - payment-service
+      - legacy-service
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+exporters:
+  # `detailed` writes whole payloads, PII included, into your log pipeline.
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [health_check, pprof]
+  telemetry:
+    metrics:
+      level: normal
+      # The collector default binds localhost:8888, which a Prometheus scraper
+      # outside the pod cannot reach.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, ratelimit, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, ratelimit, batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, ratelimit, batch]
+      exporters: [debug]

@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in the gateway is behaving incorrectly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more concrete
+        the report, the faster we can fix it.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Collector version / git SHA you are running.
+      placeholder: "v0.1.0 or 0fb024d"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the behavior you observed, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal config to reproduce
+      description: The smallest YAML that still triggers the issue. Redact anything sensitive.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: traffic
+    attributes:
+      label: How traffic was generated
+      description: e.g. telemetrygen command, a real workload snippet, OTLP payload.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant collector logs
+      description: Keep it short. Redact anything sensitive. Wrap in ```…```.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, kernel, Go version, container runtime, orchestrator (if any).

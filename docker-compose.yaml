@@ -1,0 +1,15 @@
+# Production image (root Dockerfile). Full local lab: playground/docker-compose.yaml
+services:
+  otelcol-gateway:
+    build:
+      context: .
+    image: otelcol-gateway:dev
+    container_name: otelcol-gateway
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "13133:13133" # health_check
+      - "8888:8888"   # Prometheus self-telemetry
+    volumes:
+      - ./config/otelcol-gateway.yaml:/etc/otelcol-gateway/config.yaml:ro
+    restart: unless-stopped
