@@ -1,0 +1,14 @@
+# One of: breaking, deprecation, new_component, enhancement, bug_fix
+change_type:
+
+# The component scope, matching the commit subject (e.g. processor/ratelimit).
+component:
+
+# One line, imperative, describing the change from the operator's point of view.
+note:
+
+# Issue or PR numbers this closes.
+issues: []
+
+# Optional. Indented free text for anything the one-line note cannot carry.
+subtext:
