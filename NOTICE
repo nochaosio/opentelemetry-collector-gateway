@@ -1,0 +1,18 @@
+OpenTelemetry Collector Gateway
+Copyright 2025 NOCHAOS
+
+This product includes software developed at NOCHAOS.
+
+Licensed under the Apache License, Version 2.0 (the "License"); see the
+LICENSE file in this repository.
+
+This distribution is built with the OpenTelemetry Collector Builder and
+links against components from the OpenTelemetry Collector and the
+OpenTelemetry Collector Contrib projects, which are:
+
+  Copyright The OpenTelemetry Authors
+  Licensed under the Apache License, Version 2.0
+
+Those components are consumed as Go module dependencies; their source is
+not redistributed in this repository. The full component inventory is in
+COMPONENTS.md.
