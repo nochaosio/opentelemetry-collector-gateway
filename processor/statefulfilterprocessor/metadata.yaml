@@ -1,0 +1,92 @@
+type: statefulfilter
+github_project: nochaosio/opentelemetry-collector-gateway
+
+status:
+  class: processor
+  stability:
+    beta: [traces, metrics, logs]
+  distributions: [nochaos-gateway]
+  codeowners:
+    active: [apolzek]
+
+# This processor reads its rules from Redis, so the default config is not
+# usable on its own (Validate rejects a nil redis block). The generated
+# lifecycle test builds components from the default config, so it is skipped
+# here; config_test.go covers the same ground with a real endpoint.
+tests:
+  skip_lifecycle: true
+  skip_shutdown: true
+
+telemetry:
+  metrics:
+    processor_statefulfilter_dropped_items:
+      enabled: true
+      stability: alpha
+      description: Items dropped by a shared filter rule, labelled by the rule that matched
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_statefulfilter_evaluated_items:
+      enabled: true
+      stability: alpha
+      description: Items (spans, log records, metric data points) evaluated against the Redis rule set
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_statefulfilter_kept_items:
+      enabled: true
+      stability: alpha
+      description: Items explicitly rescued by a keep rule that would otherwise have matched a drop rule
+      unit: "{item}"
+      sum:
+        value_type: int
+        monotonic: true
+
+    processor_statefulfilter_refresh_errors:
+      enabled: true
+      stability: alpha
+      description: Total failed rule refreshes since start (Redis unreachable, timeout); rules go stale, not empty
+      unit: "{error}"
+      gauge:
+        async: true
+        value_type: int
+
+    processor_statefulfilter_rules_age_seconds:
+      enabled: true
+      stability: alpha
+      description: Seconds since the last successful rule refresh; climbing means this replica is enforcing stale rules
+      unit: s
+      gauge:
+        async: true
+        value_type: double
+
+    processor_statefulfilter_rules_invalid:
+      enabled: true
+      stability: alpha
+      description: Rule documents rejected at the last refresh (bad JSON, unknown operator, bad regex)
+      unit: "{rule}"
+      gauge:
+        async: true
+        value_type: int
+
+    processor_statefulfilter_rules_loaded:
+      enabled: true
+      stability: alpha
+      description: Filter rules currently active on this replica
+      unit: "{rule}"
+      gauge:
+        async: true
+        value_type: int
+
+    processor_statefulfilter_rules_version:
+      enabled: true
+      stability: alpha
+      description: Rule-set version this replica has applied; diverging values across replicas mean the fleet is out of sync
+      unit: "{version}"
+      gauge:
+        async: true
+        value_type: int

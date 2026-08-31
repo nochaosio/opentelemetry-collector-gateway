@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -11,6 +14,8 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/processor/processortest"
+
+	"github.com/nochaosio/opentelemetry-collector-gateway/processor/ratelimitprocessor/internal/metadata"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
@@ -40,6 +45,7 @@ func gaugeDataPointCount(m *metricdata.Metrics, key string) int {
 func TestAllowN_PartialDenyRefundsTokens(t *testing.T) {
 	rl := NewRateLimiter(testConfig(10))
 	defer func() { _ = rl.Close() }()
+	defer func() { _ = rl.Close() }()
 
 	if !rl.AllowN("k", 6) {
 		t.Fatal("first 6 of 10 must be allowed")
@@ -56,6 +62,7 @@ func TestAllowN_PartialDenyRefundsTokens(t *testing.T) {
 
 func TestAllowN_OverCapacityBatchDoesNotStarve(t *testing.T) {
 	rl := NewRateLimiter(testConfig(5))
+	defer func() { _ = rl.Close() }()
 	defer func() { _ = rl.Close() }()
 
 	// A batch larger than the bucket capacity can never be admitted, but it
@@ -75,6 +82,7 @@ func TestAllowN_PartialDenyRefundsGlobal(t *testing.T) {
 	cfg := testConfig(10)
 	cfg.GlobalRequestsPerSecond = 8
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 	defer func() { _ = rl.Close() }()
 
 	// Global grants 8 of 10 → key grants 8 → denied; both buckets refunded.
@@ -109,7 +117,7 @@ func TestTraces_MultiResourceBatch_PerKeyLimits(t *testing.T) {
 	cfg.SpecificLimits = map[string]LimitConfig{
 		"svc-b": {RequestsPerSecond: 1},
 	}
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +152,7 @@ func TestMetrics_MultiResourceBatch_DropsOnlyDeniedKey(t *testing.T) {
 	cfg.SpecificLimits = map[string]LimitConfig{
 		"svc-b": {RequestsPerSecond: 2},
 	}
-	proc, err := newMetricsProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newMetricsProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +197,7 @@ func TestLogs_MultiResourceBatch_PerKeyLimits(t *testing.T) {
 	cfg.SpecificLimits = map[string]LimitConfig{
 		"svc-b": {RequestsPerSecond: 1},
 	}
-	proc, err := newLogsProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newLogsProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,8 +226,8 @@ func TestFactory_SharesStorageAcrossSignals(t *testing.T) {
 	cfg.RequestsPerSecond = 5
 	cfg.DefaultLimit = 0
 
-	set := processortest.NewNopSettings(component.MustNewType(typeStr))
-	set.ID = component.NewIDWithName(component.MustNewType(typeStr), "shared-test")
+	set := processortest.NewNopSettings(metadata.Type)
+	set.ID = component.NewIDWithName(metadata.Type, "shared-test")
 
 	ctx := context.Background()
 	tp, err := factory.CreateTraces(ctx, set, cfg, consumertest.NewNop())
@@ -259,8 +267,8 @@ func TestFactory_SharedGaugesRegisteredOnce(t *testing.T) {
 	cfg.MetricsKeyAllowlist = []string{"watched-svc"}
 
 	mp, reader := newTestMeterProvider()
-	set := processortest.NewNopSettings(component.MustNewType(typeStr))
-	set.ID = component.NewIDWithName(component.MustNewType(typeStr), "gauge-test")
+	set := processortest.NewNopSettings(metadata.Type)
+	set.ID = component.NewIDWithName(metadata.Type, "gauge-test")
 	set.MeterProvider = mp
 
 	ctx := context.Background()
@@ -308,7 +316,7 @@ func TestShutdown_UnregistersOwnGauges(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	cfg := testConfig(10)
 	cfg.MetricsKeyAllowlist = []string{"svc"}
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), &mockTracesConsumer{})
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), &mockTracesConsumer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +340,7 @@ func TestMetricKey_AutoCapWithoutAllowlist(t *testing.T) {
 	mp, _ := newTestMeterProvider()
 	cfg := testConfig(10)
 	cfg.MaxMetricKeys = 2
-	storage := testStorage()
+	storage := testStorage(t)
 	defer func() { _ = storage.Close() }()
 	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, storage)
 	if err != nil {
@@ -358,7 +366,7 @@ func TestMetricKey_AutoCapWithoutAllowlist(t *testing.T) {
 
 func TestMetricKey_DefaultCapIs100(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	storage := testStorage()
+	storage := testStorage(t)
 	defer func() { _ = storage.Close() }()
 	rp, err := newRateLimitProcessor(testConfig(10), zap.NewNop(), mp, storage)
 	if err != nil {
@@ -379,7 +387,7 @@ func TestMetricKey_NegativeMeansUnlimited(t *testing.T) {
 	mp, _ := newTestMeterProvider()
 	cfg := testConfig(10)
 	cfg.MaxMetricKeys = -1
-	storage := testStorage()
+	storage := testStorage(t)
 	defer func() { _ = storage.Close() }()
 	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, storage)
 	if err != nil {

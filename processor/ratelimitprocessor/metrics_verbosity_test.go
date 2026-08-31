@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -7,6 +10,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/processor/processortest"
+
+	"github.com/nochaosio/opentelemetry-collector-gateway/processor/ratelimitprocessor/internal/metadata"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -60,8 +65,8 @@ func TestMetricsVerbosity_Basic_NoKeyLabelNoGauges(t *testing.T) {
 	cfg.MetricsKeyAllowlist = []string{"svc-a"}
 
 	mp, reader := newTestMeterProvider()
-	set := processortest.NewNopSettings(component.MustNewType(typeStr))
-	set.ID = component.NewIDWithName(component.MustNewType(typeStr), "verbosity-basic")
+	set := processortest.NewNopSettings(metadata.Type)
+	set.ID = component.NewIDWithName(metadata.Type, "verbosity-basic")
 	set.MeterProvider = mp
 
 	ctx := context.Background()
@@ -118,8 +123,8 @@ func TestMetricsVerbosity_DetailedDefault_KeyLabelPresent(t *testing.T) {
 	cfg.MetricsKeyAllowlist = []string{"svc-a"}
 
 	mp, reader := newTestMeterProvider()
-	set := processortest.NewNopSettings(component.MustNewType(typeStr))
-	set.ID = component.NewIDWithName(component.MustNewType(typeStr), "verbosity-detailed")
+	set := processortest.NewNopSettings(metadata.Type)
+	set.ID = component.NewIDWithName(metadata.Type, "verbosity-detailed")
 	set.MeterProvider = mp
 
 	ctx := context.Background()
