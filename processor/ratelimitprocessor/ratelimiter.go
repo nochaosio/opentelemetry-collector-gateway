@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -120,6 +123,9 @@ type RateLimiter struct {
 
 // NewRateLimiter builds a rate limiter with the default (in-process)
 // memory storage. Used by tests and by callers that want the simple path.
+//
+// The caller owns the returned limiter and must Close it: the memory storage
+// runs a background eviction goroutine that lives until then.
 func NewRateLimiter(config *Config) *RateLimiter {
 	storage := newMemoryStorage(5*time.Minute, 10*time.Minute, 0, zap.NewNop())
 	return newRateLimiterWithStorage(config, storage)

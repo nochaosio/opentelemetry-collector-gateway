@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -170,8 +173,11 @@ func testConfig(rps int) *Config {
 // to build a processor directly. Using newMemoryStorage keeps test
 // behavior identical to what the factory would hand the processor at
 // runtime when `storage.backend` is unset or "memory".
-func testStorage() Storage {
-	return newMemoryStorage(time.Hour, time.Hour, 0, zap.NewNop())
+func testStorage(tb testing.TB) Storage {
+	tb.Helper()
+	ms := newMemoryStorage(time.Hour, time.Hour, 0, zap.NewNop())
+	tb.Cleanup(func() { _ = ms.Close() })
+	return ms
 }
 
 // --- Traces tests ---
@@ -180,7 +186,7 @@ func TestTracesProcessor_Allowed(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
 
-	tp, err := newTracesProcessor(testConfig(100), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(testConfig(100), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +221,7 @@ func TestTracesProcessor_Denied(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
 
-	tp, err := newTracesProcessor(testConfig(3), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(testConfig(3), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +263,7 @@ func TestTracesProcessor_DeniedPassThrough(t *testing.T) {
 	cfg := testConfig(3)
 	cfg.DropOnLimit = false
 
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +294,7 @@ func TestTracesProcessor_MetricAttributes(t *testing.T) {
 	// Limit 1 rps so 3 spans → 1 allowed, 2 denied. This exercises both an
 	// aggregated counter (received) and a key-labeled one (denied) under the
 	// default key_labels_on = [denied, preserved].
-	tp, err := newTracesProcessor(testConfig(1), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(testConfig(1), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +325,7 @@ func TestMetricsProcessor_Allowed(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockMetricsConsumer{}
 
-	proc, err := newMetricsProcessor(testConfig(100), zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newMetricsProcessor(testConfig(100), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +356,7 @@ func TestMetricsProcessor_Denied(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockMetricsConsumer{}
 
-	proc, err := newMetricsProcessor(testConfig(2), zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newMetricsProcessor(testConfig(2), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +383,7 @@ func TestLogsProcessor_Allowed(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockLogsConsumer{}
 
-	proc, err := newLogsProcessor(testConfig(100), zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newLogsProcessor(testConfig(100), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +414,7 @@ func TestLogsProcessor_Denied(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockLogsConsumer{}
 
-	proc, err := newLogsProcessor(testConfig(2), zap.NewNop(), mp, testStorage(), sink)
+	proc, err := newLogsProcessor(testConfig(2), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -497,6 +503,7 @@ func TestConfigValidation(t *testing.T) {
 func TestRateLimiter_AllowN(t *testing.T) {
 	cfg := testConfig(5)
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	if !rl.AllowN("svc-a", 5) {
 		t.Error("first 5 requests should be allowed")
@@ -509,6 +516,7 @@ func TestRateLimiter_AllowN(t *testing.T) {
 func TestRateLimiter_IndependentKeys(t *testing.T) {
 	cfg := testConfig(3)
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	if !rl.AllowN("svc-a", 3) {
 		t.Error("svc-a: first 3 should be allowed")
@@ -531,6 +539,7 @@ func TestRateLimiter_SpecificLimits(t *testing.T) {
 		},
 	}
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	if !rl.AllowN("limited-svc", 2) {
 		t.Error("limited-svc: first 2 should be allowed")
@@ -546,6 +555,7 @@ func TestRateLimiter_SpecificLimits(t *testing.T) {
 func TestTokenBucket_AllowZero(t *testing.T) {
 	cfg := testConfig(1)
 	rl := NewRateLimiter(cfg)
+	defer func() { _ = rl.Close() }()
 
 	if !rl.AllowN("svc", 0) {
 		t.Error("AllowN(0) should always return true")
@@ -556,7 +566,7 @@ func TestTokenBucket_AllowZero(t *testing.T) {
 
 func TestExtractKey_ServiceName(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	rp, err := newRateLimitProcessor(testConfig(100), zap.NewNop(), mp, testStorage())
+	rp, err := newRateLimitProcessor(testConfig(100), zap.NewNop(), mp, testStorage(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +586,7 @@ func TestExtractKey_Attribute(t *testing.T) {
 		SpecificLimits:    make(map[string]LimitConfig),
 	}
 	mp, _ := newTestMeterProvider()
-	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, testStorage())
+	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, testStorage(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +600,7 @@ func TestExtractKey_Attribute(t *testing.T) {
 
 func TestExtractKey_Default(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	rp, err := newRateLimitProcessor(testConfig(100), zap.NewNop(), mp, testStorage())
+	rp, err := newRateLimitProcessor(testConfig(100), zap.NewNop(), mp, testStorage(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -609,7 +619,7 @@ func TestExtractKey_HeaderFromClientInfo(t *testing.T) {
 		SpecificLimits:    make(map[string]LimitConfig),
 	}
 	mp, _ := newTestMeterProvider()
-	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, testStorage())
+	rp, err := newRateLimitProcessor(cfg, zap.NewNop(), mp, testStorage(t))
 	if err != nil {
 		t.Fatal(err)
 	}

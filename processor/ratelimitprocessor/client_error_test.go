@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -55,7 +58,7 @@ func assertThrottle(t *testing.T, err error) {
 func drainAndOverflowTraces(t *testing.T, cfg *Config) error {
 	t.Helper()
 	mp, _ := newTestMeterProvider()
-	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(), &mockTracesConsumer{})
+	tp, err := newTracesProcessor(cfg, zap.NewNop(), mp, testStorage(t), &mockTracesConsumer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +79,7 @@ func TestFullDrop_ThrottleError_TracesTraceAware(t *testing.T) {
 
 func TestFullDrop_ThrottleError_Metrics(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	proc, err := newMetricsProcessor(testConfig(1), zap.NewNop(), mp, testStorage(), &mockMetricsConsumer{})
+	proc, err := newMetricsProcessor(testConfig(1), zap.NewNop(), mp, testStorage(t), &mockMetricsConsumer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +90,7 @@ func TestFullDrop_ThrottleError_Metrics(t *testing.T) {
 
 func TestFullDrop_ThrottleError_Logs(t *testing.T) {
 	mp, _ := newTestMeterProvider()
-	proc, err := newLogsProcessor(testConfig(1), zap.NewNop(), mp, testStorage(), &mockLogsConsumer{})
+	proc, err := newLogsProcessor(testConfig(1), zap.NewNop(), mp, testStorage(t), &mockLogsConsumer{})
 	if err != nil {
 		t.Fatal(err)
 	}

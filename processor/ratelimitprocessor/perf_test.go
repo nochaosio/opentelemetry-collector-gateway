@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -119,7 +122,7 @@ func BenchmarkMemoryAllowUpToN_ManyKeys(b *testing.B) {
 
 func BenchmarkConsumeTraces(b *testing.B) {
 	mp, _ := newTestMeterProvider()
-	tp, err := newTracesProcessor(testConfig(1_000_000), zap.NewNop(), mp, testStorage(), discardTraces{})
+	tp, err := newTracesProcessor(testConfig(1_000_000), zap.NewNop(), mp, testStorage(b), discardTraces{})
 	if err != nil {
 		b.Fatal(err)
 	}

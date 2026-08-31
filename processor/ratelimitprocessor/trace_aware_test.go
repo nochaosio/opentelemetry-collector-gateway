@@ -1,3 +1,6 @@
+// Copyright The NOCHAOS Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package ratelimitprocessor
 
 import (
@@ -53,7 +56,7 @@ func TestTraceAware_NoPartialTraces(t *testing.T) {
 	mp, _ := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
 	// capacity 5; three traces of 3 spans each (9 normal spans).
-	tp, err := newTracesProcessor(traceAwareConfig(5), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(traceAwareConfig(5), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +88,7 @@ func TestTraceAware_ErrorTraceKeptWhole(t *testing.T) {
 	mp, reader := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
 	// capacity 1; trace0 normal (3 spans), trace1 has an error (3 spans).
-	tp, err := newTracesProcessor(traceAwareConfig(1), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(traceAwareConfig(1), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +120,7 @@ func TestTraceAware_ErrorTraceKeptWhole(t *testing.T) {
 func TestTraceAware_AllDroppedReturnsError(t *testing.T) {
 	mp, _ := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
-	tp, err := newTracesProcessor(traceAwareConfig(1), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(traceAwareConfig(1), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +139,7 @@ func TestTraceAware_AllDroppedReturnsError(t *testing.T) {
 func TestTraceAware_UnderLimitForwardsAll(t *testing.T) {
 	mp, _ := newTestMeterProvider()
 	sink := &mockTracesConsumer{}
-	tp, err := newTracesProcessor(traceAwareConfig(100), zap.NewNop(), mp, testStorage(), sink)
+	tp, err := newTracesProcessor(traceAwareConfig(100), zap.NewNop(), mp, testStorage(t), sink)
 	if err != nil {
 		t.Fatal(err)
 	}
