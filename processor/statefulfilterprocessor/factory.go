@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/processor/processorhelper"
 
 	"github.com/nochaosio/opentelemetry-collector-gateway/processor/statefulfilterprocessor/internal/metadata"
 )
@@ -44,7 +45,7 @@ func acquireStore(set processor.Settings, cfg component.Config) (*Config, ruleSt
 }
 
 func createTracesProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
@@ -53,11 +54,19 @@ func createTracesProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newTracesProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	p, err := newTracesProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewTraces(ctx, set, cfg, nextConsumer, p.processTraces,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }
 
 func createMetricsProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Metrics,
@@ -66,11 +75,19 @@ func createMetricsProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newMetricsProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	p, err := newMetricsProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewMetrics(ctx, set, cfg, nextConsumer, p.processMetrics,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }
 
 func createLogsProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Logs,
@@ -79,5 +96,13 @@ func createLogsProcessor(
 	if err != nil {
 		return nil, err
 	}
-	return newLogsProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	p, err := newLogsProcessor(oCfg, set.Logger, set.MeterProvider, store, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewLogs(ctx, set, cfg, nextConsumer, p.processLogs,
+		processorhelper.WithCapabilities(consumer.Capabilities{MutatesData: true}),
+		processorhelper.WithStart(p.start),
+		processorhelper.WithShutdown(p.shutdown),
+	)
 }

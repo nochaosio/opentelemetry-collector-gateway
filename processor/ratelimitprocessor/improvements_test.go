@@ -325,7 +325,7 @@ func TestShutdown_UnregistersOwnGauges(t *testing.T) {
 	if m := findMetric(rm, "otelcol_processor_ratelimit_bucket_capacity_tokens"); m == nil {
 		t.Fatal("gauges must be live before shutdown")
 	}
-	if err := tp.Shutdown(context.Background()); err != nil {
+	if err := tp.shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rm = collectMetrics(t, reader)

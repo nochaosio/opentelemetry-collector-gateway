@@ -5,6 +5,7 @@ package statefulfilterprocessor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/processor/processorhelper"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
@@ -206,20 +208,24 @@ func newTracesProcessor(cfg *Config, logger *zap.Logger, mp metric.MeterProvider
 	return &tracesProcessor{statefulFilterProcessor: fp, nextConsumer: next}, nil
 }
 
-func (tp *tracesProcessor) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (tp *tracesProcessor) Start(ctx context.Context, host component.Host) error {
-	return tp.start(ctx, host)
-}
-
-func (tp *tracesProcessor) Shutdown(ctx context.Context) error { return tp.shutdown(ctx) }
-
+// ConsumeTraces runs processTraces and forwards the result, mirroring what
+// processorhelper does around the same function in the factory path. Tests
+// build the processor directly and go through here.
 func (tp *tracesProcessor) ConsumeTraces(ctx context.Context, td ptrace.Traces) error {
+	out, err := tp.processTraces(ctx, td)
+	if err != nil {
+		if errors.Is(err, processorhelper.ErrSkipProcessingData) {
+			return nil
+		}
+		return err
+	}
+	return tp.nextConsumer.ConsumeTraces(ctx, out)
+}
+
+func (tp *tracesProcessor) processTraces(ctx context.Context, td ptrace.Traces) (ptrace.Traces, error) {
 	rs := tp.store.current()
 	if len(rs.traces) == 0 {
-		return tp.nextConsumer.ConsumeTraces(ctx, td)
+		return td, nil
 	}
 
 	now := time.Now()
@@ -260,9 +266,9 @@ func (tp *tracesProcessor) ConsumeTraces(ctx context.Context, td ptrace.Traces) 
 	// an empty batch (which some exporters still turn into a request) or return
 	// an error (which would make well-behaved SDKs retry data we mean to drop).
 	if td.ResourceSpans().Len() == 0 {
-		return nil
+		return td, processorhelper.ErrSkipProcessingData
 	}
-	return tp.nextConsumer.ConsumeTraces(ctx, td)
+	return td, nil
 }
 
 // Logs
@@ -280,20 +286,24 @@ func newLogsProcessor(cfg *Config, logger *zap.Logger, mp metric.MeterProvider, 
 	return &logsProcessor{statefulFilterProcessor: fp, nextConsumer: next}, nil
 }
 
-func (lp *logsProcessor) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (lp *logsProcessor) Start(ctx context.Context, host component.Host) error {
-	return lp.start(ctx, host)
-}
-
-func (lp *logsProcessor) Shutdown(ctx context.Context) error { return lp.shutdown(ctx) }
-
+// ConsumeLogs runs processLogs and forwards the result, mirroring what
+// processorhelper does around the same function in the factory path. Tests
+// build the processor directly and go through here.
 func (lp *logsProcessor) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
+	out, err := lp.processLogs(ctx, ld)
+	if err != nil {
+		if errors.Is(err, processorhelper.ErrSkipProcessingData) {
+			return nil
+		}
+		return err
+	}
+	return lp.nextConsumer.ConsumeLogs(ctx, out)
+}
+
+func (lp *logsProcessor) processLogs(ctx context.Context, ld plog.Logs) (plog.Logs, error) {
 	rs := lp.store.current()
 	if len(rs.logs) == 0 {
-		return lp.nextConsumer.ConsumeLogs(ctx, ld)
+		return ld, nil
 	}
 
 	now := time.Now()
@@ -336,9 +346,9 @@ func (lp *logsProcessor) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
 	lp.report(ctx, signalLogs, evaluated, dropped, kept)
 
 	if ld.ResourceLogs().Len() == 0 {
-		return nil
+		return ld, processorhelper.ErrSkipProcessingData
 	}
-	return lp.nextConsumer.ConsumeLogs(ctx, ld)
+	return ld, nil
 }
 
 // Metrics
@@ -356,20 +366,24 @@ func newMetricsProcessor(cfg *Config, logger *zap.Logger, mp metric.MeterProvide
 	return &metricsProcessor{statefulFilterProcessor: fp, nextConsumer: next}, nil
 }
 
-func (mp *metricsProcessor) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (mp *metricsProcessor) Start(ctx context.Context, host component.Host) error {
-	return mp.start(ctx, host)
-}
-
-func (mp *metricsProcessor) Shutdown(ctx context.Context) error { return mp.shutdown(ctx) }
-
+// ConsumeMetrics runs processMetrics and forwards the result, mirroring what
+// processorhelper does around the same function in the factory path. Tests
+// build the processor directly and go through here.
 func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
+	out, err := mp.processMetrics(ctx, md)
+	if err != nil {
+		if errors.Is(err, processorhelper.ErrSkipProcessingData) {
+			return nil
+		}
+		return err
+	}
+	return mp.nextConsumer.ConsumeMetrics(ctx, out)
+}
+
+func (mp *metricsProcessor) processMetrics(ctx context.Context, md pmetric.Metrics) (pmetric.Metrics, error) {
 	rs := mp.store.current()
 	if len(rs.metrics) == 0 {
-		return mp.nextConsumer.ConsumeMetrics(ctx, md)
+		return md, nil
 	}
 
 	now := time.Now()
@@ -408,9 +422,9 @@ func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metri
 	mp.report(ctx, signalMetrics, evaluated, dropped, kept)
 
 	if md.ResourceMetrics().Len() == 0 {
-		return nil
+		return md, processorhelper.ErrSkipProcessingData
 	}
-	return mp.nextConsumer.ConsumeMetrics(ctx, md)
+	return md, nil
 }
 
 // removeDataPoints applies `keep` to every data point of m and reports whether

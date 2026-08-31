@@ -374,17 +374,15 @@ func newTracesProcessor(config *Config, logger *zap.Logger, mp metric.MeterProvi
 	}, nil
 }
 
-func (tp *tracesProcessor) Capabilities() consumer.Capabilities {
-	// We mutate data (drop overflow spans) under the priority-aware path.
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (tp *tracesProcessor) Start(ctx context.Context, host component.Host) error {
-	return tp.start(ctx, host)
-}
-
-func (tp *tracesProcessor) Shutdown(ctx context.Context) error {
-	return tp.shutdown(ctx)
+// ConsumeTraces runs processTraces and forwards the result, mirroring what
+// processorhelper does around the same function in the factory path. Tests
+// build the processor directly and go through here.
+func (tp *tracesProcessor) ConsumeTraces(ctx context.Context, td ptrace.Traces) error {
+	out, err := tp.processTraces(ctx, td)
+	if err != nil {
+		return err
+	}
+	return tp.nextConsumer.ConsumeTraces(ctx, out)
 }
 
 // isCriticalSpan flags spans we always want to keep when PreserveErrors is on.
@@ -547,10 +545,10 @@ func dropTracesByID(td ptrace.Traces, drop map[pcommon.TraceID]bool) {
 
 // consumeTracesByTrace is the all-or-nothing-per-trace path (TraceIDAware),
 // applied per rate-limit key.
-func (tp *tracesProcessor) consumeTracesByTrace(ctx context.Context, td ptrace.Traces) error {
+func (tp *tracesProcessor) processTracesByTrace(ctx context.Context, td ptrace.Traces) (ptrace.Traces, error) {
 	rss := td.ResourceSpans()
 	if rss.Len() == 0 {
-		return tp.nextConsumer.ConsumeTraces(ctx, td)
+		return td, nil
 	}
 
 	resByKey := make(map[string][]int)
@@ -611,21 +609,21 @@ func (tp *tracesProcessor) consumeTracesByTrace(ctx context.Context, td ptrace.T
 
 	if totalDenied > 0 && tp.config.DropOnLimit {
 		if forwarded == 0 {
-			return tp.limitExceededError(deniedKey, totalDenied)
+			return td, tp.limitExceededError(deniedKey, totalDenied)
 		}
 		dropTracesByID(td, dropAll)
 	}
 
-	return tp.nextConsumer.ConsumeTraces(ctx, td)
+	return td, nil
 }
 
-func (tp *tracesProcessor) ConsumeTraces(ctx context.Context, td ptrace.Traces) error {
+func (tp *tracesProcessor) processTraces(ctx context.Context, td ptrace.Traces) (ptrace.Traces, error) {
 	if tp.config.TraceIDAware {
-		return tp.consumeTracesByTrace(ctx, td)
+		return tp.processTracesByTrace(ctx, td)
 	}
 
 	if td.ResourceSpans().Len() == 0 {
-		return tp.nextConsumer.ConsumeTraces(ctx, td)
+		return td, nil
 	}
 
 	resKeys, groups := tp.tracesKeyGroups(ctx, td)
@@ -675,12 +673,12 @@ func (tp *tracesProcessor) ConsumeTraces(ctx context.Context, td ptrace.Traces) 
 		// If nothing at all was admitted, reject the batch instead of
 		// forwarding an empty one.
 		if forwarded == 0 {
-			return tp.limitExceededError(deniedKey, totalDenied)
+			return td, tp.limitExceededError(deniedKey, totalDenied)
 		}
 		dropNormalSpansByKey(td, resKeys, excessByKey, tp.config.PreserveErrors)
 	}
 
-	return tp.nextConsumer.ConsumeTraces(ctx, td)
+	return td, nil
 }
 
 // Metrics Processor
@@ -700,18 +698,14 @@ func newMetricsProcessor(config *Config, logger *zap.Logger, mp metric.MeterProv
 	}, nil
 }
 
-func (mp *metricsProcessor) Capabilities() consumer.Capabilities {
-	// We mutate data (remove denied keys' resource entries) when a
-	// multi-tenant batch is partially over limit.
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (mp *metricsProcessor) Start(ctx context.Context, host component.Host) error {
-	return mp.start(ctx, host)
-}
-
-func (mp *metricsProcessor) Shutdown(ctx context.Context) error {
-	return mp.shutdown(ctx)
+// ConsumeMetrics runs processMetrics and forwards the result. See
+// tracesProcessor.ConsumeTraces for why this adapter exists.
+func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
+	out, err := mp.processMetrics(ctx, md)
+	if err != nil {
+		return err
+	}
+	return mp.nextConsumer.ConsumeMetrics(ctx, out)
 }
 
 func countDataPointsIn(rm pmetric.ResourceMetrics) int {
@@ -745,10 +739,10 @@ func countDataPoints(md pmetric.Metrics) int {
 	return count
 }
 
-func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
+func (mp *metricsProcessor) processMetrics(ctx context.Context, md pmetric.Metrics) (pmetric.Metrics, error) {
 	rms := md.ResourceMetrics()
 	if rms.Len() == 0 {
-		return mp.nextConsumer.ConsumeMetrics(ctx, md)
+		return md, nil
 	}
 
 	// Bill each resource entry to its own key so multi-tenant batches are
@@ -796,7 +790,7 @@ func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metri
 
 	if totalDenied > 0 && mp.config.DropOnLimit {
 		if forwarded == 0 {
-			return mp.limitExceededError(deniedKey, totalDenied)
+			return md, mp.limitExceededError(deniedKey, totalDenied)
 		}
 		idx := -1
 		rms.RemoveIf(func(pmetric.ResourceMetrics) bool {
@@ -805,7 +799,7 @@ func (mp *metricsProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metri
 		})
 	}
 
-	return mp.nextConsumer.ConsumeMetrics(ctx, md)
+	return md, nil
 }
 
 // Logs Processor
@@ -825,16 +819,14 @@ func newLogsProcessor(config *Config, logger *zap.Logger, mp metric.MeterProvide
 	}, nil
 }
 
-func (lp *logsProcessor) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: true}
-}
-
-func (lp *logsProcessor) Start(ctx context.Context, host component.Host) error {
-	return lp.start(ctx, host)
-}
-
-func (lp *logsProcessor) Shutdown(ctx context.Context) error {
-	return lp.shutdown(ctx)
+// ConsumeLogs runs processLogs and forwards the result. See
+// tracesProcessor.ConsumeTraces for why this adapter exists.
+func (lp *logsProcessor) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
+	out, err := lp.processLogs(ctx, ld)
+	if err != nil {
+		return err
+	}
+	return lp.nextConsumer.ConsumeLogs(ctx, out)
 }
 
 // isCriticalLog flags ERROR-and-above severities as must-keep.
@@ -904,9 +896,9 @@ func dropNormalLogsByKey(ld plog.Logs, resKeys []string, excessByKey map[string]
 	})
 }
 
-func (lp *logsProcessor) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
+func (lp *logsProcessor) processLogs(ctx context.Context, ld plog.Logs) (plog.Logs, error) {
 	if ld.ResourceLogs().Len() == 0 {
-		return lp.nextConsumer.ConsumeLogs(ctx, ld)
+		return ld, nil
 	}
 
 	resKeys, groups := lp.logsKeyGroups(ctx, ld)
@@ -948,10 +940,10 @@ func (lp *logsProcessor) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
 
 	if totalDenied > 0 && lp.config.DropOnLimit {
 		if forwarded == 0 {
-			return lp.limitExceededError(deniedKey, totalDenied)
+			return ld, lp.limitExceededError(deniedKey, totalDenied)
 		}
 		dropNormalLogsByKey(ld, resKeys, excessByKey, lp.config.PreserveErrors)
 	}
 
-	return lp.nextConsumer.ConsumeLogs(ctx, ld)
+	return ld, nil
 }
