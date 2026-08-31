@@ -34,6 +34,22 @@ updates:
           - "github.com/alicebob/*"
     open-pull-requests-limit: 10
 
+  # Native processor (separate Go module).
+  - package-ecosystem: gomod
+    directory: "/processor/statefulfilterprocessor"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+      redis-stack:
+        patterns:
+          - "github.com/redis/*"
+          - "github.com/alicebob/*"
+    open-pull-requests-limit: 10
+
   # GitHub Actions we pin by version in workflows.
   - package-ecosystem: github-actions
     directory: "/"
