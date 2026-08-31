@@ -2,8 +2,5 @@
 # Only list findings that are (a) not exploitable in this distribution AND
 # (b) have no upstream fix yet. Re-check on every dependency bump.
 #
-# GO-2026-5662: Stored XSS in the Prometheus *web UI* (tooltips/metrics
-# explorer), pulled in transitively by prometheusremotewriteexporter and
-# opampextension. The collector never serves that UI — only package init()
-# is reachable. No fixed version exists (Fixed in: N/A as of 2026-07-07).
-GO-2026-5662
+# Empty: nothing is suppressed. GO-2026-5662 (Prometheus web UI stored XSS)
+# was dropped once prometheus/prometheus reached v0.313.2, past the fix.
