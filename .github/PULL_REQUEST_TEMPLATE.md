@@ -19,7 +19,7 @@ Thanks for contributing! A few reminders from CONTRIBUTING.md:
 
 - [ ] `go test -race -count=1 ./processor/ratelimitprocessor/...`
 - [ ] `make build` succeeds
-- [ ] Added / updated a scenario in `TESTING.md` (if user-visible behavior changed)
+- [ ] Added / updated a scenario in `processor/ratelimitprocessor/docs/testing.md` (if user-visible behavior changed)
 - [ ] `./benchmarks/run.sh` unchanged within noise (if you touched a hot path)
 
 ## Breaking changes

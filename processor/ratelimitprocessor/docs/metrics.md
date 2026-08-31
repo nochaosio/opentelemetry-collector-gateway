@@ -2,7 +2,7 @@
 
 Every metric the processor exports, on the collector's self-telemetry endpoint
 (`:8888/metrics` in the default config). Deep dive (labels, cardinality
-internals, logs): [internal_ratelimit.md](internal_ratelimit.md).
+internals, logs): [internal-telemetry.md](internal-telemetry.md).
 
 ## Counters
 

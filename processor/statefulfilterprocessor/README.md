@@ -1,5 +1,15 @@
 # statefulfilter processor
 
+| Status        |           |
+| ------------- |-----------|
+| Stability     | [beta]: traces, metrics, logs |
+| Distributions | [nochaos-gateway] |
+| Issues        | [![Open issues](https://img.shields.io/github/issues-search/nochaosio/opentelemetry-collector-gateway?query=is%3Aissue%20is%3Aopen%20label%3Aprocessor%2Fstatefulfilter&label=open&color=orange&logo=opentelemetry)](https://github.com/nochaosio/opentelemetry-collector-gateway/issues?q=is%3Aopen+is%3Aissue+label%3Aprocessor%2Fstatefulfilter) |
+| Code Owners   | [@apolzek](https://www.github.com/apolzek) |
+
+[beta]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/component-stability.md#beta
+[nochaos-gateway]: https://github.com/nochaosio/opentelemetry-collector-gateway
+
 Drops telemetry according to rules that live in **Redis**, not in the collector
 config.
 
