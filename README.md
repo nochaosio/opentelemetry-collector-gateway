@@ -32,4 +32,4 @@ deliberately should not spend rate-limit budget that legitimate traffic needs.
 
 ## License
 
-[MIT License](LICENSE)
+[Apache License 2.0](LICENSE). Third-party attributions are in [NOTICE](NOTICE).
