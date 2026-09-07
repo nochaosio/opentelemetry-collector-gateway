@@ -3,7 +3,7 @@ module github.com/nochaosio/opentelemetry-collector-gateway/processor/statefulfi
 go 1.26.7
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/collector/component v1.65.0
