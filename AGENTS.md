@@ -40,6 +40,7 @@ Component inventory: [COMPONENTS.md](COMPONENTS.md). Build manifest:
 make test          # both processors, with -race
 make build         # regenerates the collector binary via OCB
 make validate      # validates config/otelcol-gateway.yaml against the binary
+make test-e2e      # pushes real telemetry through the built binary
 ```
 
 For a single processor:
@@ -51,6 +52,20 @@ cd processor/ratelimitprocessor && go test -race -count=1 ./...
 Prefer running the real thing over describing what should happen. The
 `benchmarks/` and `playground/` directories exist so changes can be exercised
 against a running collector.
+
+### After a dependency or collector bump, run `make test-e2e`
+
+`make test` exercises the processors as libraries and `make validate` only
+reads the config schema. Neither one touches the binary OCB regenerates, which
+is the artifact a version bump actually changes. `scripts/e2e.sh` closes that
+gap: it sends real spans with `telemetrygen` and asserts the counters add up,
+covering the ratelimit allow and drop paths, one token bucket shared by two
+instances through Redis, and a statefulfilter rule dropping traffic and then
+being disabled without a restart.
+
+It needs `telemetrygen` (`make install-telemetrygen`) and Docker for the Redis
+scenarios, which are skipped when Docker is unavailable. Set
+`REDIS_SCENARIOS=on` to make their absence a failure instead.
 
 ## Commit and PR title convention
 
