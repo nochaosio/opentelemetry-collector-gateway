@@ -7,7 +7,7 @@
 ARG GO_VERSION=1.26
 # Keep in sync with OCB_VERSION in the Makefile and the collector
 # versions pinned in builder-config.yaml.
-ARG OCB_VERSION=v0.159.0
+ARG OCB_VERSION=v0.160.0
 
 FROM golang:${GO_VERSION}-alpine AS build
 ARG OCB_VERSION
