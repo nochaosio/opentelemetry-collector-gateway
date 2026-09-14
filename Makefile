@@ -1,5 +1,5 @@
-OCB_VERSION := v0.159.0
-MDATAGEN_VERSION := v0.159.0
+OCB_VERSION := v0.160.0
+MDATAGEN_VERSION := v0.160.0
 BINARY := cmd/otelcol-gateway/otelcol-gateway
 CONFIG := config/otelcol-gateway.yaml
 
