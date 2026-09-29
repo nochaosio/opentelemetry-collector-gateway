@@ -18,6 +18,12 @@ updates:
           - "google.golang.org/grpc*"
           - "google.golang.org/genproto*"
           - "google.golang.org/protobuf"
+    ignore:
+      # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
+      # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
+      # once v1.85.0 ships (see the grpc replace in builder-config.yaml).
+      - dependency-name: "google.golang.org/grpc"
+        versions: [">= 1.84.0, < 1.85.0"]
     open-pull-requests-limit: 10
 
   # Native processor (separate Go module).
@@ -36,6 +42,12 @@ updates:
         patterns:
           - "github.com/redis/*"
           - "github.com/alicebob/*"
+    ignore:
+      # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
+      # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
+      # once v1.85.0 ships (see the grpc replace in builder-config.yaml).
+      - dependency-name: "google.golang.org/grpc"
+        versions: [">= 1.84.0, < 1.85.0"]
     open-pull-requests-limit: 10
 
   # Native processor (separate Go module).
@@ -54,6 +66,12 @@ updates:
         patterns:
           - "github.com/redis/*"
           - "github.com/alicebob/*"
+    ignore:
+      # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
+      # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
+      # once v1.85.0 ships (see the grpc replace in builder-config.yaml).
+      - dependency-name: "google.golang.org/grpc"
+        versions: [">= 1.84.0, < 1.85.0"]
     open-pull-requests-limit: 10
 
   # GitHub Actions we pin by version in workflows.
