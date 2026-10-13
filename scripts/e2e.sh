@@ -116,7 +116,7 @@ require_tools() {
 
 start_redis() {
   docker rm -f "$REDIS_CONTAINER" >/dev/null 2>&1 || true
-  docker run -d --rm --name "$REDIS_CONTAINER" -p 6379:6379 redis:7-alpine >/dev/null
+  docker run -d --rm --name "$REDIS_CONTAINER" -p 6379:6379 redis:8-alpine >/dev/null
   local i
   for i in $(seq 1 30); do
     docker exec -i "$REDIS_CONTAINER" redis-cli PING >/dev/null 2>&1 && return 0

@@ -265,7 +265,7 @@ Drive a service to replica A with one telemetrygen, and simultaneously the same 
 
 **Start Redis:**
 ```bash
-docker run --rm -d --name otelcol-rl-redis -p 6379:6379 redis:7-alpine
+docker run --rm -d --name otelcol-rl-redis -p 6379:6379 redis:8-alpine
 ```
 
 **Config** (both replicas use this, different ports):

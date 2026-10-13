@@ -24,7 +24,7 @@ COPY . .
 RUN builder --config builder-config.yaml \
  && strip cmd/otelcol-gateway/otelcol-gateway
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /src/cmd/otelcol-gateway/otelcol-gateway /otelcol-gateway
 COPY --from=build /src/config/otelcol-gateway.yaml /etc/otelcol-gateway/config.yaml
 

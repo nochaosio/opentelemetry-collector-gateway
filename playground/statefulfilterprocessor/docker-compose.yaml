@@ -17,7 +17,7 @@ services:
       - redis
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: statefulfilter-redis
     ports:
       - "6379:6379"   # so `redis-cli` from the host works too

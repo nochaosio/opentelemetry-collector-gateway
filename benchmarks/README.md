@@ -87,7 +87,7 @@ curl -fsSL -o /tmp/contrib.tar.gz \
   https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.162.0/otelcol-contrib_0.160.0_linux_amd64.tar.gz
 tar -xzf /tmp/contrib.tar.gz -C /tmp otelcol-contrib
 go install github.com/open-telemetry/opentelemetry-collector-contrib/cmd/telemetrygen@v0.162.0
-docker run -d --name bench-redis -p 6399:6379 redis:7-alpine
+docker run -d --name bench-redis -p 6399:6379 redis:8-alpine
 
 ./run-comparison.sh
 ```
