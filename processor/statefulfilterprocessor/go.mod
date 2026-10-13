@@ -3,8 +3,8 @@ module github.com/nochaosio/opentelemetry-collector-gateway/processor/statefulfi
 go 1.26.7
 
 require (
-	github.com/alicebob/miniredis/v2 v2.39.0
-	github.com/redis/go-redis/v9 v9.22.0
+	github.com/alicebob/miniredis/v2 v2.40.0
+	github.com/redis/go-redis/v9 v9.23.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/collector/component v1.68.0
 	go.opentelemetry.io/collector/component/componenttest v0.162.0
@@ -54,7 +54,7 @@ require (
 	go.opentelemetry.io/collector/pipeline v1.68.0 // indirect
 	go.opentelemetry.io/collector/processor/xprocessor v0.162.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.46.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
