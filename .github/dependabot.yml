@@ -4,8 +4,7 @@ updates:
   - package-ecosystem: gomod
     directory: "/cmd/otelcol-gateway"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     commit-message:
       prefix: "[chore]"
     groups:
@@ -18,6 +17,9 @@ updates:
           - "google.golang.org/grpc*"
           - "google.golang.org/genproto*"
           - "google.golang.org/protobuf"
+      everything-else:
+        patterns:
+          - "*"
     ignore:
       # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
       # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
@@ -30,8 +32,7 @@ updates:
   - package-ecosystem: gomod
     directory: "/processor/ratelimitprocessor"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     commit-message:
       prefix: "[chore]"
     groups:
@@ -42,6 +43,9 @@ updates:
         patterns:
           - "github.com/redis/*"
           - "github.com/alicebob/*"
+      everything-else:
+        patterns:
+          - "*"
     ignore:
       # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
       # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
@@ -54,8 +58,7 @@ updates:
   - package-ecosystem: gomod
     directory: "/processor/statefulfilterprocessor"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     commit-message:
       prefix: "[chore]"
     groups:
@@ -66,6 +69,9 @@ updates:
         patterns:
           - "github.com/redis/*"
           - "github.com/alicebob/*"
+      everything-else:
+        patterns:
+          - "*"
     ignore:
       # grpc v1.84.x is affected by GO-2026-6443 (server panic on a missing
       # :authority/Host); v1.83.2 and v1.85.0+ are the fixed releases. Drop this
@@ -78,7 +84,11 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: "[chore]"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     open-pull-requests-limit: 5
