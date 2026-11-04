@@ -4,7 +4,7 @@
 # Final image is non-root and contains only the collector binary
 # and CA certs — nothing else.
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 # Keep in sync with OCB_VERSION in the Makefile and the collector
 # versions pinned in builder-config.yaml.
 ARG OCB_VERSION=v0.164.0

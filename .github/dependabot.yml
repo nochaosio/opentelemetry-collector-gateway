@@ -20,6 +20,11 @@ updates:
       everything-else:
         patterns:
           - "*"
+    ignore:
+      # gobwas/glob v1 drops the glob.Glob type that contrib's pkg/ottl still
+      # uses; the build breaks. Follow whatever contrib pins instead.
+      - dependency-name: "github.com/gobwas/glob"
+        versions: [">= 1.0.0"]
     open-pull-requests-limit: 10
 
   # Native processor (separate Go module).
@@ -40,6 +45,11 @@ updates:
       everything-else:
         patterns:
           - "*"
+    ignore:
+      # gobwas/glob v1 drops the glob.Glob type that contrib's pkg/ottl still
+      # uses; the build breaks. Follow whatever contrib pins instead.
+      - dependency-name: "github.com/gobwas/glob"
+        versions: [">= 1.0.0"]
     open-pull-requests-limit: 10
 
   # Native processor (separate Go module).
@@ -60,6 +70,11 @@ updates:
       everything-else:
         patterns:
           - "*"
+    ignore:
+      # gobwas/glob v1 drops the glob.Glob type that contrib's pkg/ottl still
+      # uses; the build breaks. Follow whatever contrib pins instead.
+      - dependency-name: "github.com/gobwas/glob"
+        versions: [">= 1.0.0"]
     open-pull-requests-limit: 10
 
   # GitHub Actions we pin by version in workflows.
@@ -73,4 +88,37 @@ updates:
       github-actions:
         patterns:
           - "*"
+    open-pull-requests-limit: 5
+
+  # Base images in the Dockerfile (Go builder, distroless runtime).
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "[chore]"
+    groups:
+      docker:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  # Images in the compose files (Redis, redis_exporter).
+  - package-ecosystem: docker-compose
+    directories:
+      - "/"
+      - "/playground/ratelimitprocessor"
+      - "/playground/statefulfilterprocessor"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "[chore]"
+    groups:
+      docker-compose:
+        patterns:
+          - "*"
+    ignore:
+      # Redis majors can change the RDB format; bump those by hand.
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5

@@ -9,7 +9,7 @@ services:
       - "6379:6379"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.93.0
+    image: oliver006/redis_exporter:v1.97.0
     container_name: otelcol-redis-exporter
     command: ["--redis.addr", "redis://redis:6379"]
     ports:
