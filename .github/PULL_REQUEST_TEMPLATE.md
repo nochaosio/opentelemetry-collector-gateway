@@ -17,9 +17,10 @@ Thanks for contributing! A few reminders from CONTRIBUTING.md:
 
 ## How it was tested
 
-- [ ] `go test -race -count=1 ./processor/ratelimitprocessor/...`
-- [ ] `make build` succeeds
-- [ ] Added / updated a scenario in `processor/ratelimitprocessor/docs/testing.md` (if user-visible behavior changed)
+- [ ] `make test` (both processors, with `-race`)
+- [ ] `make build` and `make validate`
+- [ ] `make test-e2e` (required after a collector or dependency bump)
+- [ ] `.chloggen/` entry added, or the change is `[chore]`
 - [ ] `./benchmarks/run.sh` unchanged within noise (if you touched a hot path)
 
 ## Breaking changes

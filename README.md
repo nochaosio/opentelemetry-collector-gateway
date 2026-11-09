@@ -1,6 +1,10 @@
 # OpenTelemetry Collector Gateway
 
-A contrib-based OpenTelemetry Collector distribution standing at the front door of your observability pipeline
+[![ci](https://github.com/nochaosio/opentelemetry-collector-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/nochaosio/opentelemetry-collector-gateway/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nochaosio/opentelemetry-collector-gateway/badge)](https://scorecard.dev/viewer/?uri=github.com/nochaosio/opentelemetry-collector-gateway)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
+A contrib-based OpenTelemetry Collector distribution standing at the front door of your observability pipeline.
 
 ## Built on
 
@@ -21,11 +25,33 @@ The two processors that are ours, and exist because contrib has no equivalent:
 
 ## Quick start
 
+Container image (linux/amd64 and linux/arm64, signed with cosign):
+
+```bash
+docker run --rm -p 4317:4317 -p 4318:4318 -p 13133:13133 \
+  ghcr.io/nochaosio/otelcol-gateway:latest
+```
+
+Binaries for Linux, macOS and Windows are attached to each
+[release](https://github.com/nochaosio/opentelemetry-collector-gateway/releases).
+
+From source:
+
 ```bash
 make install-builder
 make build
 make run
 ```
+
+## Example configs
+
+| Config | Shows |
+|--------|-------|
+| [`otelcol-gateway.yaml`](config/otelcol-gateway.yaml) | Default: OTLP in, per-service rate limit |
+| [`otelcol-gateway-frontdoor.yaml`](config/otelcol-gateway-frontdoor.yaml) | Token auth, Jaeger/Zipkin/remote-write/Fluent ingest, sampling, redaction |
+| [`otelcol-gateway-connectors.yaml`](config/otelcol-gateway-connectors.yaml) | span metrics, count, failover, round robin |
+| [`otelcol-gateway-redis.yaml`](config/otelcol-gateway-redis.yaml) | Fleet-wide rate limit through Redis |
+| [`otelcol-gateway-statefulfilter.yaml`](config/otelcol-gateway-statefulfilter.yaml) | Drop rules held in Redis |
 
 ## Benchmarks
 
@@ -41,6 +67,11 @@ processors: [memory_limiter, filter/*, statefulfilter, redaction/*, attributes/*
 
 `statefulfilter` sits before `ratelimit` on purpose: telemetry you are dropping
 deliberately should not spend rate-limit budget that legitimate traffic needs.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+Security reports go through [SECURITY.md](SECURITY.md).
 
 ## License
 

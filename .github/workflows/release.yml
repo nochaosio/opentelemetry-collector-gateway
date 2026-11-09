@@ -1,0 +1,78 @@
+name: release
+
+# Publishes collector binaries on every v* tag. Container images are built by
+# build-and-deploy.yml from the same tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: processor/ratelimitprocessor/go.mod
+      - name: install OCB
+        run: make install-builder
+      - name: build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          # OCB itself must run on the host: install it before GOOS applies.
+          "$(GOOS='' GOARCH='' go env GOPATH)/bin/builder" --config builder-config.yaml
+      - name: package
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          name="otelcol-gateway_${GITHUB_REF_NAME#v}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/${name}"
+          # OCB appends .exe on its own for windows.
+          bin=cmd/otelcol-gateway/otelcol-gateway
+          [ "$GOOS" = windows ] && bin="$bin.exe"
+          cp "$bin" LICENSE NOTICE README.md config/otelcol-gateway.yaml "dist/${name}/"
+          tar -C dist -czf "dist/${name}.tar.gz" "${name}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bin-*
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        run: cd dist && sha256sum -- *.tar.gz > checksums.txt
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release notes are the CHANGELOG section for this tag, falling back
+          # to GitHub's generated notes when the section is missing.
+          awk -v v="## ${GITHUB_REF_NAME#v}" '
+            index($0, v) == 1 {f=1; next}
+            /^## / && f {exit}
+            f' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --verify-tag "${notes[@]}"

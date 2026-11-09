@@ -41,6 +41,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless cosign signing through GitHub's OIDC token.
+      id-token: write
     strategy:
       matrix:
         include:
@@ -55,14 +57,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v7
+        id: push
         with:
           context: ${{ matrix.context }}
+          # The Dockerfile cross-compiles, so arm64 costs no QEMU emulation.
+          platforms: linux/amd64,linux/arm64
+          provenance: mode=max
+          sbom: true
           push: ${{ github.ref == 'refs/heads/main' || github.ref_type == 'tag' }}
           tags: |
             ${{ needs.version.outputs.registry }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
             ${{ needs.version.outputs.registry }}/${{ matrix.image }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: sigstore/cosign-installer@v4
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+      # Verify with:
+      #   cosign verify ghcr.io/<owner>/otelcol-gateway:<tag> \
+      #     --certificate-identity-regexp 'https://github.com/<owner>/opentelemetry-collector-gateway/' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: sign image
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+        env:
+          IMAGE: ${{ needs.version.outputs.registry }}/${{ matrix.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
   # Deployment lives in the private environment repository, not here. This job
   # only announces that a new image exists; whoever consumes the event decides

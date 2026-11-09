@@ -68,8 +68,54 @@ jobs:
         run: |
           ./cmd/otelcol-gateway/otelcol-gateway --help >/dev/null
           ls -lh ./cmd/otelcol-gateway/otelcol-gateway
-      - name: validate default config
-        run: ./cmd/otelcol-gateway/otelcol-gateway validate --config config/otelcol-gateway.yaml
+      - name: validate configs
+        # The Redis-backed configs ping Redis while building the pipeline, so
+        # they are covered by the e2e job instead.
+        run: |
+          for c in config/otelcol-gateway.yaml config/otelcol-gateway-connectors.yaml config/otelcol-gateway-frontdoor.yaml; do
+            ./cmd/otelcol-gateway/otelcol-gateway validate --config "$c"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: otelcol-gateway
+          path: cmd/otelcol-gateway/otelcol-gateway
+          retention-days: 3
+
+  # Pushes real telemetry through the binary the build job produced: ratelimit
+  # allow/drop, a Redis-shared bucket across two instances, and a statefulfilter
+  # hot reload. See scripts/e2e.sh.
+  e2e:
+    name: end-to-end
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: processor/ratelimitprocessor/go.mod
+      - uses: actions/download-artifact@v8
+        with:
+          name: otelcol-gateway
+          path: cmd/otelcol-gateway
+      - run: chmod +x cmd/otelcol-gateway/otelcol-gateway
+      - name: install telemetrygen
+        run: make install-telemetrygen
+      - name: run e2e
+        env:
+          REDIS_SCENARIOS: "on"
+        run: PATH="$HOME/go/bin:$PATH" scripts/e2e.sh
+
+  # Generated files must match metadata.yaml (see CONTRIBUTING.md).
+  generated:
+    name: generated files are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: processor/ratelimitprocessor/go.mod
+      - run: PATH="$(go env GOPATH)/bin:$PATH" make install-mdatagen generate
+      - run: git diff --exit-code
 
   govulncheck:
     name: vulnerability scan (govulncheck)

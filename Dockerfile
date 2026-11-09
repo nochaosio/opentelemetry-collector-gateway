@@ -9,9 +9,11 @@ ARG GO_VERSION=1.27
 # versions pinned in builder-config.yaml.
 ARG OCB_VERSION=v0.165.0
 
-FROM golang:${GO_VERSION}-alpine AS build
+# The build stage runs on the host's architecture and cross-compiles for the
+# target one: running OCB under QEMU for arm64 is several times slower.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 ARG OCB_VERSION
-RUN apk add --no-cache git ca-certificates binutils \
+RUN apk add --no-cache git ca-certificates \
  && go install go.opentelemetry.io/collector/cmd/builder@${OCB_VERSION}
 
 WORKDIR /src
@@ -21,14 +23,18 @@ COPY processor/ratelimitprocessor/go.mod processor/ratelimitprocessor/go.sum \
 COPY processor/statefulfilterprocessor/go.mod processor/statefulfilterprocessor/go.sum \
      processor/statefulfilterprocessor/
 COPY . .
-RUN builder --config builder-config.yaml \
- && strip cmd/otelcol-gateway/otelcol-gateway
+ARG TARGETOS TARGETARCH
+# OCB already links with -s -w unless debug_compilation is set, so no strip.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    builder --config builder-config.yaml
 
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /src/cmd/otelcol-gateway/otelcol-gateway /otelcol-gateway
 COPY --from=build /src/config/otelcol-gateway.yaml /etc/otelcol-gateway/config.yaml
 
 # OTLP gRPC / HTTP, health_check, prometheus self-telemetry.
+# The front-door receivers (jaeger, zipkin, ...) use the ports in
+# config/otelcol-gateway-frontdoor.yaml; publish the ones you enable.
 # pprof (1777) binds to localhost by default and is intentionally NOT exposed.
 EXPOSE 4317 4318 13133 8888
 
