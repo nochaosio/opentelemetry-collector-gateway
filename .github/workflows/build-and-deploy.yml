@@ -70,7 +70,7 @@ jobs:
             ${{ needs.version.outputs.registry }}/${{ matrix.image }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
       # Verify with:
       #   cosign verify ghcr.io/<owner>/otelcol-gateway:<tag> \
