@@ -1,5 +1,5 @@
-OCB_VERSION := v0.164.0
-MDATAGEN_VERSION := v0.164.0
+OCB_VERSION := v0.165.0
+MDATAGEN_VERSION := v0.165.0
 BINARY := cmd/otelcol-gateway/otelcol-gateway
 CONFIG := config/otelcol-gateway.yaml
 
@@ -8,8 +8,14 @@ CONFIG := config/otelcol-gateway.yaml
 install-builder:
 	go install go.opentelemetry.io/collector/cmd/builder@$(OCB_VERSION)
 
+# mdatagen's go.mod carries local replace directives, so `go install pkg@ver`
+# refuses it. Build it from a shallow clone of the matching collector tag.
+MDATAGEN_SRC := $(shell go env GOCACHE)/mdatagen-src-$(MDATAGEN_VERSION)
 install-mdatagen:
-	go install go.opentelemetry.io/collector/cmd/mdatagen@$(MDATAGEN_VERSION)
+	test -d $(MDATAGEN_SRC) || git clone --quiet --depth 1 \
+		--branch cmd/mdatagen/$(MDATAGEN_VERSION) \
+		https://github.com/open-telemetry/opentelemetry-collector.git $(MDATAGEN_SRC)
+	cd $(MDATAGEN_SRC)/cmd/mdatagen && go build -o $(shell go env GOPATH)/bin/mdatagen .
 
 install-telemetrygen:
 	go install github.com/open-telemetry/opentelemetry-collector-contrib/cmd/telemetrygen@$(OCB_VERSION)
