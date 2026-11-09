@@ -1,0 +1,138 @@
+# Front door: one endpoint for every producer, whatever protocol it speaks.
+#
+#   otlp (bearer token) -+
+#   jaeger, zipkin ------+-> traces  -> sampling -> otlp_grpc/backend
+#   prometheus remote w. -+-> metrics -> delta_to_cumulative -> prometheus_remote_write
+#   fluent_forward ------+-> logs    -> redaction -> otlp_grpc/backend
+#
+# Legacy protocols land here and leave as OTLP, so producers migrate on their
+# own schedule. Validate it locally:
+#   otelcol-gateway validate --config config/otelcol-gateway-frontdoor.yaml
+#
+# Tokens come from GATEWAY_TOKEN. For per-tenant JWTs swap bearertokenauth for
+# the oidc extension (commented out below): it fetches the issuer's keys on
+# start, so it needs a reachable issuer.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  bearertokenauth/producers:
+    scheme: Bearer
+    token: ${env:GATEWAY_TOKEN:-change-me}
+
+  # oidc:
+  #   providers:
+  #     - issuer_url: https://idp.example.com/realms/telemetry
+  #       audience: otel-gateway
+  #       username_claim: sub
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth/producers
+        # Producers that hold a connection forever pin it to one replica and
+        # defeat the load balancer; recycling it lets new replicas take load.
+        keepalive:
+          server_parameters:
+            max_connection_age: 5m
+            max_connection_age_grace: 30s
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/producers
+        # Bounds the memory one oversized request can claim before
+        # memory_limiter sees it.
+        max_request_body_size: 20971520
+
+  # Unauthenticated legacy protocols: keep them on an internal listener only.
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+  zipkin:
+    endpoint: 0.0.0.0:9411
+
+  # Prometheus agents and Grafana Alloy push here instead of to the TSDB, so
+  # the same limits and routing apply to scraped metrics.
+  prometheus_remote_write:
+    endpoint: 0.0.0.0:9090
+
+  fluent_forward:
+    endpoint: 0.0.0.0:8006
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  # Tags telemetry with the gateway's own host/cloud identity, so a backend can
+  # tell which gateway region a series crossed.
+  resource_detection:
+    detectors: [env, system]
+    override: false
+
+  # Remote-write producers send cumulative series in fragments; PRW exporters
+  # and many backends want them stitched back together.
+  delta_to_cumulative:
+    max_stale: 5m
+    max_streams: 100000
+
+  # Cheap head sampling for the healthy bulk. Use tail_sampling instead when
+  # you must keep every error trace (costs memory per in-flight trace).
+  probabilistic_sampler:
+    sampling_percentage: 25
+    mode: proportional
+
+  # Regroups records by tenant so the routing connector and per-tenant
+  # exporters see whole batches instead of interleaved ones.
+  groupbyattrs:
+    keys: [tenant.id]
+
+  redaction:
+    allow_all_keys: true
+    blocked_values:
+      - "4[0-9]{12}(?:[0-9]{3})?"          # Visa card numbers
+      - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+" # e-mail addresses
+
+  ratelimit:
+    limit_type: service_name
+    requests_per_second: 100
+    drop_on_limit: true
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  otlp_grpc/backend:
+    endpoint: ${env:BACKEND_OTLP_ENDPOINT:-backend:4317}
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      queue_size: 5000
+
+  prometheus_remote_write/tsdb:
+    endpoint: ${env:BACKEND_PRW_ENDPOINT:-http://mimir:9009/api/v1/push}
+
+service:
+  extensions: [health_check, bearertokenauth/producers]
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger, zipkin]
+      processors: [memory_limiter, resource_detection, groupbyattrs, ratelimit, probabilistic_sampler, batch]
+      exporters: [otlp_grpc/backend]
+    metrics:
+      receivers: [otlp, prometheus_remote_write]
+      processors: [memory_limiter, resource_detection, groupbyattrs, delta_to_cumulative, ratelimit, batch]
+      exporters: [prometheus_remote_write/tsdb]
+    logs:
+      receivers: [otlp, fluent_forward]
+      processors: [memory_limiter, resource_detection, groupbyattrs, redaction, ratelimit, batch]
+      exporters: [otlp_grpc/backend]

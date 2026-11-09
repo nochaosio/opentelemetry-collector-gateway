@@ -1,0 +1,10 @@
+change_type: new_component
+component: distribution
+note: Add front-door receivers, processors, an exporter, a connector and OIDC auth to the distribution
+issues: []
+subtext: |
+  Receivers: jaeger, zipkin, prometheus_remote_write, fluent_forward.
+  Processors: probabilistic_sampler, k8s_attributes, resource_detection,
+  groupbyattrs, delta_to_cumulative, cumulative_to_delta.
+  Connector: service_graph. Exporter: file. Extension: oidc.
+  config/otelcol-gateway-frontdoor.yaml wires them into a runnable example.
