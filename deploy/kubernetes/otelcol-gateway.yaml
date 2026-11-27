@@ -41,7 +41,7 @@ data:
         timeout: 10s
         send_batch_size: 1024
     exporters:
-      otlp/backend:
+      otlp_grpc/backend:
         endpoint: backend-collector:4317
         tls:
           insecure: true
@@ -60,15 +60,15 @@ data:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, ratelimit, batch]
-          exporters: [otlp/backend]
+          exporters: [otlp_grpc/backend]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, ratelimit, batch]
-          exporters: [otlp/backend]
+          exporters: [otlp_grpc/backend]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, ratelimit, batch]
-          exporters: [otlp/backend]
+          exporters: [otlp_grpc/backend]
 ---
 apiVersion: apps/v1
 kind: Deployment

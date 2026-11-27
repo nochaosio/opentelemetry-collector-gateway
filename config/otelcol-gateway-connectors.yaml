@@ -75,7 +75,7 @@ exporters:
   # Stand-in for the real backend: the host does not resolve, which is what
   # makes the failover to the secondary level visible in a local run — point it
   # at your backend and level 1 becomes the one doing the work.
-  otlp/primary:
+  otlp_grpc/primary:
     endpoint: backend-primary:4317
     tls:
       insecure: true
@@ -113,7 +113,7 @@ service:
 
     traces/primary:
       receivers: [failover]
-      exporters: [otlp/primary]
+      exporters: [otlp_grpc/primary]
     traces/secondary:
       receivers: [failover]
       exporters: [debug/secondary]

@@ -50,11 +50,11 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 
 | Component | Origin | Description |
 |-----------|--------|-------------|
-| `otlp` | upstream | Forwards to any OTLP-compatible backend (gRPC) |
-| `otlphttp` | upstream | Same, over OTLP/HTTP (required by backends that don't speak gRPC) |
+| `otlp_grpc` | upstream | Forwards to any OTLP-compatible backend (gRPC) |
+| `otlp_http` | upstream | Same, over OTLP/HTTP (required by backends that don't speak gRPC) |
 | `kafka` | contrib | Publishes telemetry to Kafka topics |
-| `loadbalancing` | contrib | Distributes load across multiple OTLP endpoints |
-| `prometheusremotewrite` | contrib | Writes metrics to Prometheus-compatible TSDBs (Mimir, Thanos, VictoriaMetrics) |
+| `load_balancing` | contrib | Distributes load across multiple OTLP endpoints |
+| `prometheus_remote_write` | contrib | Writes metrics to Prometheus-compatible TSDBs (Mimir, Thanos, VictoriaMetrics) |
 | `file` | contrib | Writes telemetry to rotating local files; replay captures and debug traffic without a backend |
 | `debug` | upstream | Prints telemetry to stdout (dev only) |
 
@@ -66,7 +66,7 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 | `pprof` | contrib | Go runtime profiles for post-hoc analysis (default :1777) |
 | `zpages` | upstream | In-process debug pages (`/debug/tracez`, `/debug/pipelinez`) |
 | `file_storage` | contrib | Persistent state backend, so exporter `sending_queue` survives restarts |
-| `basicauth` | contrib | Server-side HTTP basic-auth for OTLP producers |
+| `basic_auth` | contrib | Server-side HTTP basic-auth for OTLP producers |
 | `bearertokenauth` | contrib | Server-side bearer-token auth for OTLP producers |
 | `oauth2client` | contrib | Client-credentials OAuth2 for exporters talking to protected backends |
 | `oidc` | contrib | Server-side JWT validation against an OIDC issuer; per-tenant identity for producers |
