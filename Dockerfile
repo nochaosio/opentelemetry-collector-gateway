@@ -7,7 +7,7 @@
 ARG GO_VERSION=1.27
 # Keep in sync with OCB_VERSION in the Makefile and the collector
 # versions pinned in builder-config.yaml.
-ARG OCB_VERSION=v0.165.0
+ARG OCB_VERSION=v0.166.0
 
 # The build stage runs on the host's architecture and cross-compiles for the
 # target one: running OCB under QEMU for arm64 is several times slower.
