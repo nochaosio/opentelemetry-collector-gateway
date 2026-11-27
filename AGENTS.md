@@ -60,8 +60,9 @@ reads the config schema. Neither one touches the binary OCB regenerates, which
 is the artifact a version bump actually changes. `scripts/e2e.sh` closes that
 gap: it sends real spans with `telemetrygen` and asserts the counters add up,
 covering the ratelimit allow and drop paths, one token bucket shared by two
-instances through Redis, and a statefulfilter rule dropping traffic and then
-being disabled without a restart.
+instances through Redis, a statefulfilter rule dropping traffic and then
+being disabled without a restart, and an edge to gateway hop over OTel Arrow
+with log_dedup, signal_to_metrics and the memory_limiter extension.
 
 It needs `telemetrygen` (`make install-telemetrygen`) and Docker for the Redis
 scenarios, which are skipped when Docker is unavailable. Set

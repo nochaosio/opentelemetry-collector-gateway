@@ -1,0 +1,85 @@
+# Edge tier of a two-tier deployment: producers speak OTLP to a collector next
+# to them, and that collector ships to the central gateway over OTel Arrow.
+#
+#   producers --OTLP--> edge (this file) --otelarrow--> gateway
+#                                                       (otelcol-gateway-arrow.yaml)
+#
+# Arrow streams compress repeated attributes column by column, so the edge to
+# gateway hop, usually the one that crosses a zone, region or paid link, costs
+# far fewer bytes than plain OTLP with the same zstd.
+#
+# Point it at the gateway with GATEWAY_ARROW_ENDPOINT.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Refuses a request in the receiver, before it is decoded into pdata, while
+  # the processor of the same name only sees data that was already allocated.
+  # Keep both: the extension sheds the load, the processor catches the rest.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        middlewares:
+          - id: memory_limiter
+      http:
+        endpoint: 0.0.0.0:4318
+        middlewares:
+          - id: memory_limiter
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+exporters:
+  otelarrow:
+    endpoint: ${env:GATEWAY_ARROW_ENDPOINT:-gateway:4317}
+    tls:
+      insecure: true
+    # Without it, an unreachable gateway makes the exporter restart its
+    # streams with no backoff: about 125 error lines a second per edge, plus
+    # the CPU to produce them (upstream issue #52784). With it, stream setup
+    # waits for the connection instead.
+    #
+    # Gotcha, as of v0.166.0: data accepted while the gateway has never been
+    # reachable since the edge started is delivered twice once it comes up
+    # (the retried request plus the copy the stream kept). A gateway restart
+    # under live traffic does not duplicate. Start the gateway tier first.
+    wait_for_ready: true
+    # No batch processor in the pipelines: the exporter already batches in
+    # its sending queue (1000 to 1500 items, 1s flush), and both together
+    # batch twice. Streams default to max(1, NumCPU/2) and are recycled every
+    # 30s, so a scaled up gateway fleet behind an L4 balancer gets new ones.
+
+service:
+  extensions: [health_check, memory_limiter]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otelarrow]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otelarrow]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otelarrow]

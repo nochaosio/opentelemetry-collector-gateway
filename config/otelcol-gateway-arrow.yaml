@@ -1,0 +1,134 @@
+# Gateway tier of a two-tier deployment: receives OTel Arrow streams from the
+# edge collectors (otelcol-edge-arrow.yaml).
+#
+#   otelarrow -+-> traces/in -+-> signal_to_metrics -> delta_to_cumulative -> prometheus :8889
+#              |              `-> forward/traces -> batch -> debug
+#              +-> logs/in ---+-> signal_to_metrics
+#              |              `-> forward/logs -> log_dedup -> batch -> debug
+#              `-> metrics -> batch -> debug
+#
+# signal_to_metrics sees every record before log_dedup collapses repeats, so
+# the volume series stay true even though the backend receives one record per
+# duplicate group. Swap `debug` for your backend exporter.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otelarrow:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        # Arrow batches decode into large pdata; the default 4 MiB is small.
+        max_recv_msg_size_mib: 64
+        keepalive:
+          server_parameters:
+            max_connection_age: 5m
+            max_connection_age_grace: 30s
+    # Arrow streams carry many requests per connection, so they are bounded by
+    # the receiver's own admission control rather than a receiver middleware.
+    admission:
+      request_limit_mib: 128
+      waiting_limit_mib: 32
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  # Collapses identical log records seen within the interval into one record
+  # carrying a `log_count` attribute. Crash loops and retry storms are where
+  # this pays off.
+  log_dedup:
+    interval: 10s
+    log_count_attribute: log_count
+
+  # signal_to_metrics emits deltas with no start time. The prometheus exporter
+  # drops such points as misaligned after the first batch, so the counters
+  # undercount; accumulating them here first keeps the totals exact.
+  delta_to_cumulative:
+    max_stale: 5m
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+connectors:
+  forward/traces: {}
+  forward/logs: {}
+
+  # One OTTL-driven connector in place of span_metrics plus count.
+  signal_to_metrics:
+    spans:
+      - name: gateway.spans
+        description: Spans received by the gateway, by service
+        include_resource_attributes:
+          - key: service.name
+        sum:
+          value: Int(AdjustedCount())
+          monotonic: true
+      - name: gateway.span.duration
+        description: Span duration in milliseconds, by service
+        unit: ms
+        include_resource_attributes:
+          - key: service.name
+        histogram:
+          buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+          value: Milliseconds(span.end_time - span.start_time)
+    logs:
+      - name: gateway.log_records
+        description: Log records received by the gateway, before deduplication
+        include_resource_attributes:
+          - key: service.name
+        sum:
+          value: "1"
+          monotonic: true
+
+exporters:
+  debug:
+    verbosity: basic
+
+  # Pull endpoint for the derived metrics, for setups that scrape the gateway
+  # rather than receive remote write.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # Series idle this long are dropped. service.name becomes the `job` label, so no resource labels are needed.
+    metric_expiration: 5m
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces/in:
+      receivers: [otelarrow]
+      processors: [memory_limiter]
+      exporters: [signal_to_metrics, forward/traces]
+    traces:
+      receivers: [forward/traces]
+      processors: [batch]
+      exporters: [debug]
+    logs/in:
+      receivers: [otelarrow]
+      processors: [memory_limiter]
+      exporters: [signal_to_metrics, forward/logs]
+    logs:
+      receivers: [forward/logs]
+      processors: [log_dedup, batch]
+      exporters: [debug]
+    metrics/derived:
+      receivers: [signal_to_metrics]
+      processors: [delta_to_cumulative, batch]
+      exporters: [prometheus]
+    metrics:
+      receivers: [otelarrow]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

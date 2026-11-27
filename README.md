@@ -52,6 +52,8 @@ make run
 | [`otelcol-gateway-connectors.yaml`](config/otelcol-gateway-connectors.yaml) | span metrics, count, failover, round robin |
 | [`otelcol-gateway-redis.yaml`](config/otelcol-gateway-redis.yaml) | Fleet-wide rate limit through Redis |
 | [`otelcol-gateway-statefulfilter.yaml`](config/otelcol-gateway-statefulfilter.yaml) | Drop rules held in Redis |
+| [`otelcol-edge-arrow.yaml`](config/otelcol-edge-arrow.yaml) | Edge tier: OTLP in behind the memory_limiter extension, OTel Arrow out |
+| [`otelcol-gateway-arrow.yaml`](config/otelcol-gateway-arrow.yaml) | Gateway tier: OTel Arrow in, log_dedup, signal_to_metrics, prometheus exporter |
 
 ## Benchmarks
 
