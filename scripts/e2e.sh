@@ -11,6 +11,9 @@
 #   1. ratelimit, in memory    allow path and drop path on config/otelcol-gateway.yaml
 #   2. ratelimit, shared redis two instances share one token bucket
 #   3. statefulfilter          rule driven drop, plus hot reload from Redis
+#   4. otelarrow two tier      edge -> gateway over Arrow, log_dedup,
+#                              signal_to_metrics, prometheus exporter and the
+#                              memory_limiter extension refusing at the receiver
 #
 # Scenarios 2 and 3 need Docker for Redis and are skipped when it is missing.
 #
@@ -111,6 +114,7 @@ require_tools() {
     missing=1
   }
   command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required." >&2; missing=1; }
+  command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required." >&2; missing=1; }
   [ "$missing" -eq 0 ] || exit 1
 }
 
@@ -335,12 +339,117 @@ scenario_statefulfilter() {
   sleep 1
 }
 
+# ---------------------------------------------------------------------------
+# Scenario 4: two tiers over OTel Arrow, on the shipped arrow configs.
+# edge (otlp in, memory_limiter extension) -> otelarrow -> gateway
+# (signal_to_metrics, log_dedup, prometheus exporter). No Redis needed.
+# ---------------------------------------------------------------------------
+exporter_log_records() {
+  local log="$1"
+  grep -oE '"log records": [0-9]+' "$log" 2>/dev/null \
+    | awk '{sum += $3} END {print sum + 0}'
+}
+
+scenario_arrow_two_tier() {
+  say "Scenario 4: edge -> gateway over OTel Arrow (log_dedup, signal_to_metrics, prometheus)"
+
+  # The gateway keeps the shipped ports; the edge moves aside so both fit on
+  # one host. Short intervals keep the run short; the shipped ones are 5-10s.
+  sed -e 's|:4317|:4327|; s|:4318|:4328|; s|:13133|:13134|; s|port: 8888|port: 8890|' \
+      config/otelcol-edge-arrow.yaml >"$WORK/edge.yaml"
+
+  start_collector s4gw config/otelcol-gateway-arrow.yaml 13133 \
+    --set=processors.batch.timeout=1s --set=processors.log_dedup.interval=1s || return
+  GATEWAY_ARROW_ENDPOINT=127.0.0.1:4317 start_collector s4edge "$WORK/edge.yaml" 13134 \
+    --set=processors.batch.timeout=1s || return
+
+  gen_traces 127.0.0.1:4327 e2e-arrow 10 --child-spans 3
+  "$TELEMETRYGEN" logs --otlp-insecure --otlp-endpoint 127.0.0.1:4327 \
+    --service e2e-dedup --logs 50 --rate 0 >/dev/null 2>&1
+  sleep 4
+
+  local edge_in edge_out gw_in arrow_bytes spans derived
+  edge_in="$(metric 8890 'otelcol_receiver_accepted_spans\{receiver="otlp"')"
+  edge_out="$(metric 8890 'otelcol_exporter_sent_spans\{exporter="otelarrow"')"
+  gw_in="$(metric 8888 'otelcol_receiver_accepted_spans\{receiver="otelarrow"')"
+  # Only the Arrow stream methods count here: a silent fallback to plain
+  # OTLP would deliver the spans but leave this at zero.
+  arrow_bytes="$(metric 8888 'otelcol_receiver_recv\{method="[^"]*ArrowTraces"')"
+  spans="$(exporter_spans "$WORK/s4gw.log")"
+  derived="$(metric 8889 'gateway_spans_total\{job="e2e-arrow"')"
+
+  info "traces: edge_in=$edge_in edge_out=$edge_out gateway_in=$gw_in arrow_bytes=$arrow_bytes exporter=$spans span_metric=$derived"
+  if [ "$edge_in" -gt 0 ] && [ "$edge_out" = "$edge_in" ] && [ "$gw_in" = "$edge_in" ] && [ "$arrow_bytes" -gt 0 ]; then
+    pass "every span crossed the tier boundary on an Arrow stream ($gw_in)"
+  else
+    fail "arrow hop lost or bypassed data: edge_in=$edge_in edge_out=$edge_out gateway_in=$gw_in arrow_bytes=$arrow_bytes"
+  fi
+  [ "$spans" = "$gw_in" ] && pass "gateway exporter emitted every span ($spans)" \
+    || fail "gateway exporter emitted $spans of $gw_in spans"
+  [ "$derived" = "$gw_in" ] && pass "signal_to_metrics counted every span on the prometheus exporter ($derived)" \
+    || fail "gateway_spans_total=$derived, expected $gw_in"
+
+  local logs_in logs_metric logs_out
+  logs_in="$(metric 8888 'otelcol_receiver_accepted_log_records\{receiver="otelarrow"')"
+  logs_metric="$(metric 8889 'gateway_log_records_total\{job="e2e-dedup"')"
+  logs_out="$(exporter_log_records "$WORK/s4gw.log")"
+  info "logs: gateway_in=$logs_in counted=$logs_metric exported_after_dedup=$logs_out"
+  if [ "$logs_in" = "50" ] && [ "$logs_metric" = "50" ]; then
+    pass "volume metric counted all 50 records before deduplication"
+  else
+    fail "expected 50 received and counted, got received=$logs_in counted=$logs_metric"
+  fi
+  if [ "$logs_out" -gt 0 ] && [ "$logs_out" -lt 10 ]; then
+    pass "log_dedup collapsed 50 identical records into $logs_out"
+  else
+    fail "log_dedup exported $logs_out records for 50 identical ones"
+  fi
+
+  local errors
+  errors="$(cat "$WORK/s4gw.log" "$WORK/s4edge.log" | grep -cE $'\terror\t|\twarn\t|panic' || true)"
+  [ "$errors" = "0" ] && pass "no warnings, errors or panics on either tier" \
+    || fail "$errors warning/error lines across both tiers"
+
+  kill "${PIDS[-1]}" 2>/dev/null || true
+  sleep 1
+
+  # The memory_limiter extension must refuse in the receiver, before decode.
+  # A 2 MiB limit is below any live heap, so every request has to bounce.
+  python3 - "$WORK/edge.yaml" "$WORK/edge-tight.yaml" <<'EOF'
+import sys
+cfg = open(sys.argv[1]).read()
+shipped = ("  memory_limiter:\n    check_interval: 1s\n"
+           "    limit_percentage: 80\n    spike_limit_percentage: 20\n")
+tight = "  memory_limiter:\n    check_interval: 100ms\n    limit_mib: 2\n    spike_limit_mib: 1\n"
+assert cfg.count(shipped) == 2, "edge config layout changed; update this scenario"
+open(sys.argv[2], "w").write(cfg.replace(shipped, tight, 1))
+EOF
+  GATEWAY_ARROW_ENDPOINT=127.0.0.1:4317 start_collector s4tight "$WORK/edge-tight.yaml" 13134 || return
+  gen_traces 127.0.0.1:4327 e2e-refused 5 || true
+  local http_code refused accepted
+  http_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"resourceSpans":[]}' http://127.0.0.1:4328/v1/traces)"
+  sleep 1
+  refused="$(metric 8890 'otelcol_memorylimiter_refused_requests\{transport="grpc"')"
+  accepted="$(metric 8890 'otelcol_receiver_accepted_spans\{receiver="otlp"')"
+  info "memory_limiter extension: grpc_refused=$refused http_status=$http_code accepted_spans=$accepted"
+  if [ "$refused" -gt 0 ] && [ "$http_code" = "429" ] && [ "$accepted" = "0" ]; then
+    pass "memory_limiter extension refused gRPC and HTTP before the receiver decoded anything"
+  else
+    fail "expected refusals and nothing accepted, got refused=$refused http=$http_code accepted=$accepted"
+  fi
+
+  kill "${PIDS[-1]}" "${PIDS[-3]}" 2>/dev/null || true
+  sleep 1
+}
+
 main() {
   require_tools
   info "binary:       $("$BINARY" --version 2>&1 | head -1)"
   info "telemetrygen: $(command -v "$TELEMETRYGEN")"
 
   scenario_ratelimit_memory
+  scenario_arrow_two_tier
 
   local want_redis=1
   case "$REDIS_SCENARIOS" in

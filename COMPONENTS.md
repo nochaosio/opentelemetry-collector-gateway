@@ -12,6 +12,7 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 | `zipkin` | contrib | Accepts Zipkin v1/v2 traces for the same reason |
 | `prometheus_remote_write` | contrib | Takes remote-write pushes from Prometheus agents and Alloy, so scraped metrics get the same limits and routing |
 | `fluent_forward` | contrib | Accepts logs from Fluent Bit and Fluentd over the Forward protocol |
+| `otelarrow` | contrib | OTel Arrow streams from edge collectors; pairs with the `otelarrow` exporter |
 
 ## Processors
 
@@ -32,6 +33,7 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 | `groupbyattrs` | contrib | Regroups records by an attribute (e.g. tenant) so per-tenant routing sees whole batches |
 | `delta_to_cumulative` | contrib | Converts delta producers for cumulative-only backends such as Prometheus remote write |
 | `cumulative_to_delta` | contrib | The reverse, for delta-only backends |
+| `log_dedup` | contrib | Collapses identical log records within an interval into one carrying a `log_count`; crash loops and retry storms stop costing per line |
 | `batch` | upstream | Batches telemetry before export |
 
 ## Connectors
@@ -45,6 +47,7 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 | `span_metrics` | contrib | Derives RED metrics (calls, duration) from the spans crossing the gateway, so producers don't have to emit them |
 | `count` | contrib | Cheap volume/error counters from any signal; keeps ingestion visible even when the payloads are sampled away |
 | `service_graph` | contrib | Builds a service dependency graph as metrics from client/server span pairs |
+| `signal_to_metrics` | contrib | OTTL-defined sums and histograms from spans, logs or datapoints; one connector for what `span_metrics` and `count` do. Pair with `delta_to_cumulative` before the `prometheus` exporter |
 
 ## Exporters
 
@@ -52,9 +55,11 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 |-----------|--------|-------------|
 | `otlp_grpc` | upstream | Forwards to any OTLP-compatible backend (gRPC) |
 | `otlp_http` | upstream | Same, over OTLP/HTTP (required by backends that don't speak gRPC) |
+| `otelarrow` | contrib | Edge to gateway hop over OTel Arrow: columnar streams that cost far fewer bytes than OTLP. See the gotchas in `config/otelcol-edge-arrow.yaml` |
 | `kafka` | contrib | Publishes telemetry to Kafka topics |
 | `load_balancing` | contrib | Distributes load across multiple OTLP endpoints |
 | `prometheus_remote_write` | contrib | Writes metrics to Prometheus-compatible TSDBs (Mimir, Thanos, VictoriaMetrics) |
+| `prometheus` | contrib | Pull `/metrics` endpoint for derived metrics, for setups that scrape the gateway |
 | `file` | contrib | Writes telemetry to rotating local files; replay captures and debug traffic without a backend |
 | `debug` | upstream | Prints telemetry to stdout (dev only) |
 
@@ -65,6 +70,7 @@ The selected *receivers, exporters, extensions, connectors*, and *processors* we
 | `health_check` | contrib | HTTP readiness endpoint for LBs (default :13133) |
 | `pprof` | contrib | Go runtime profiles for post-hoc analysis (default :1777) |
 | `zpages` | upstream | In-process debug pages (`/debug/tracez`, `/debug/pipelinez`) |
+| `memory_limiter` | upstream | Refuses requests inside HTTP/gRPC receivers before they are decoded (HTTP 429, gRPC RESOURCE_EXHAUSTED). Complements the processor, does not replace it |
 | `file_storage` | contrib | Persistent state backend, so exporter `sending_queue` survives restarts |
 | `basic_auth` | contrib | Server-side HTTP basic-auth for OTLP producers |
 | `bearertokenauth` | contrib | Server-side bearer-token auth for OTLP producers |

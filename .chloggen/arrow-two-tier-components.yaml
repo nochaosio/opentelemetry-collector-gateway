@@ -1,0 +1,10 @@
+change_type: new_component
+component: distribution
+note: Add OTel Arrow, the memory_limiter extension, log_dedup, signal_to_metrics and the prometheus exporter
+issues: []
+subtext: |
+  Receiver and exporter: otelarrow, for the edge to gateway hop.
+  Extension: memory_limiter, refusing requests in the receiver before decode.
+  Processor: log_dedup. Connector: signal_to_metrics. Exporter: prometheus.
+  config/otelcol-edge-arrow.yaml and config/otelcol-gateway-arrow.yaml wire
+  them into a two-tier example, exercised by scenario 4 of scripts/e2e.sh.
